@@ -1,0 +1,32 @@
+__pycache__
+.DS_Store
+.vscode
+.idea
+
+all excels
+all resumes
+logs
+
+old
+
+secrets.py
+config/personals.py
+.venv
+apikeys.py
+
+# Env / secrets
+**/.env
+**/.env.*
+!.env.example
+
+# Databases / local state
+**/*.db
+backend/app.db
+
+# Runtime artifacts
+bot_runtime/
+**/*.stop
+
+# Node / frontend build
+**/node_modules/
+frontend/dist/

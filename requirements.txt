@@ -1,0 +1,15 @@
+undetected-chromedriver>=3.5.0
+pyautogui>=0.9.54
+setuptools
+openai
+flask-cors
+flask
+fastapi
+uvicorn
+sqlalchemy
+pymysql
+python-jose[cryptography]
+passlib[bcrypt]
+pydantic[email]
+python-dotenv
+alembic

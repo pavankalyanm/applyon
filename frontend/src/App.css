@@ -1,0 +1,63 @@
+/* Global layout helpers */
+.fade-in {
+  animation: fadeIn 0.8s ease-out both;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.slide-up {
+  animation: slideUp 0.9s ease-out both;
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+}
+
+.float-card {
+  animation: floatCard 9s ease-in-out infinite;
+}
+
+.float-card-delayed {
+  animation: floatCard 11s ease-in-out infinite reverse;
+}
+
+.pulse-glow {
+  animation: pulseGlow 6s ease-in-out infinite;
+}
+
+@keyframes floatCard {
+  0% {
+    transform: translate3d(0, 0, 0) rotateZ(0deg);
+  }
+  50% {
+    transform: translate3d(0, -16px, 0) rotateZ(1deg);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) rotateZ(0deg);
+  }
+}
+
+@keyframes pulseGlow {
+  0% {
+    opacity: 0.55;
+    transform: scale(0.98);
+  }
+  50% {
+    opacity: 0.95;
+    transform: scale(1.03);
+  }
+  100% {
+    opacity: 0.55;
+    transform: scale(0.98);
+  }
+}
