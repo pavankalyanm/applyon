@@ -44,7 +44,8 @@ export function OnboardingWizard() {
           setPersonals({ ...defaultPersonals, ...data.personals })
         }
         if (data.questions) {
-          setQuestions({ ...defaultQuestions, ...data.questions })
+          const { default_resume_path: _defaultResumePath, ...restQuestions } = data.questions as ConfigResponse['questions'] & { default_resume_path?: string }
+          setQuestions({ ...defaultQuestions, ...restQuestions })
         }
         if (data.search) {
           setSearch({
@@ -98,12 +99,12 @@ export function OnboardingWizard() {
   async function saveAll() {
     setSaving(true)
     try {
+      const { default_resume_path: _defaultResumePath, ...questionPayload } = questions as QuestionsConfig & { default_resume_path?: string }
       await api.put('/config', {
         personals,
-        questions,
+        questions: questionPayload,
         search,
         settings: { ...settings, secrets },
-        resume,
       })
     } finally {
       setSaving(false)
@@ -232,4 +233,3 @@ export function OnboardingWizard() {
     </Box>
   )
 }
-

@@ -9,7 +9,10 @@ import {
   Container,
   Divider,
   IconButton,
+  MenuItem,
+  Pagination,
   Paper,
+  Select,
   Stack,
   Toolbar,
   Typography,
@@ -62,10 +65,14 @@ const statusConfig: Record<string, { color: 'success' | 'warning' | 'error' | 'd
 export function Dashboard() {
   const navigate = useNavigate()
   const [runs, setRuns] = useState<Run[]>([])
+  const [runsPage, setRunsPage] = useState(1)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [expandedRuns, setExpandedRuns] = useState<Record<number, boolean>>({})
   const [runDetails, setRunDetails] = useState<Record<number, RunDetail>>({})
+  const [resumes, setResumes] = useState<{ id: string; label: string }[]>([])
+  const [selectedResumeId, setSelectedResumeId] = useState<string | ''>('')
+  const runsPerPage = 25
 
   async function refreshExpandedRunDetails(runIds?: number[]) {
     const ids = runIds ?? Object.entries(expandedRuns)
@@ -88,7 +95,16 @@ export function Dashboard() {
     try {
       const resp = await api.get('/runs')
       setRuns(resp.data)
+      setRunsPage(1)
       await refreshExpandedRunDetails()
+      // also refresh resumes so the selector stays in sync
+      const resumesResp = await api.get('/resumes')
+      const data = resumesResp.data || {}
+      const items = (data.items as { id: string; label: string }[]) || []
+      setResumes(items)
+      if (!selectedResumeId && data.default_resume_id) {
+        setSelectedResumeId(data.default_resume_id as string)
+      }
     } catch {
       // silent
     }
@@ -98,6 +114,10 @@ export function Dashboard() {
     setError(null)
     setLoading(true)
     try {
+      // If a resume is selected, mark it as default before starting the run
+      if (selectedResumeId) {
+        await api.post(`/resumes/${selectedResumeId}/default`)
+      }
       await api.post('/runs')
       await refresh()
     } catch (e: any) {
@@ -132,7 +152,7 @@ export function Dashboard() {
   }
 
   useEffect(() => {
-    refresh()
+    void refresh()
     const interval = setInterval(refresh, 2000)
     return () => clearInterval(interval)
   }, [])
@@ -142,6 +162,9 @@ export function Dashboard() {
   const runningCount = runs.filter((run) => run.status === 'running').length
   const completedCount = runs.filter((run) => run.status === 'success' || run.status === 'completed').length
   const totalCount = runs.length
+  const totalPages = Math.max(1, Math.ceil(totalCount / runsPerPage))
+  const currentPage = Math.min(runsPage, totalPages)
+  const paginatedRuns = runs.slice((currentPage - 1) * runsPerPage, currentPage * runsPerPage)
 
   return (
     <Box sx={{ minHeight: '100dvh', bgcolor: '#f8faf9' }}>
@@ -278,7 +301,28 @@ export function Dashboard() {
                   </Typography>
                 </Stack>
               </Stack>
-              <Stack direction="row" spacing={1.5}>
+              <Stack direction="row" spacing={1.5} alignItems="center">
+                <Select
+                  size="small"
+                  displayEmpty
+                  value={selectedResumeId}
+                  onChange={(e) => setSelectedResumeId(e.target.value as string)}
+                  sx={{
+                    minWidth: 220,
+                    bgcolor: '#f0fdf4',
+                    color: '#14532d',
+                    '& .MuiOutlinedInput-notchedOutline': { borderColor: '#bbf7d0' },
+                  }}
+                >
+                  <MenuItem value="">
+                    <em>Default resume (from settings)</em>
+                  </MenuItem>
+                  {resumes.map((r) => (
+                    <MenuItem key={r.id} value={r.id}>
+                      {r.label}
+                    </MenuItem>
+                  ))}
+                </Select>
                 <Button
                   variant="contained"
                   disabled={loading}
@@ -301,12 +345,10 @@ export function Dashboard() {
                       variant="outlined"
                       onClick={() => stopRun(activeRun.id)}
                       startIcon={<Stop />}
-                      disabled={activeRun.status === 'stopping'}
                       sx={{
                         borderColor: 'rgba(255,255,255,0.3)',
                         color: '#fff',
                         '&:hover': { borderColor: '#fff', bgcolor: 'rgba(255,255,255,0.1)' },
-                        '&.Mui-disabled': { borderColor: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.5)' },
                       }}
                     >
                       Stop
@@ -369,7 +411,7 @@ export function Dashboard() {
               </Paper>
             ) : (
               <Stack spacing={1.5}>
-                {runs.map((run) => {
+                {paginatedRuns.map((run) => {
                   const cfg = statusConfig[run.status] ?? statusConfig.pending
                   const expanded = expandedRuns[run.id] ?? false
                   const details = runDetails[run.id]
@@ -441,7 +483,6 @@ export function Dashboard() {
                                   size="small"
                                   onClick={() => stopRun(run.id)}
                                   title="Stop"
-                                  disabled={run.status === 'stopping'}
                                 >
                                   <Stop sx={{ fontSize: 18, color: '#f59e0b' }} />
                                 </IconButton>
@@ -498,6 +539,17 @@ export function Dashboard() {
                     </Paper>
                   )
                 })}
+                {totalPages > 1 && (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
+                    <Pagination
+                      count={totalPages}
+                      page={currentPage}
+                      onChange={(_, page) => setRunsPage(page)}
+                      color="primary"
+                      shape="rounded"
+                    />
+                  </Box>
+                )}
               </Stack>
             )}
           </Box>

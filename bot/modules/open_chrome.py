@@ -9,14 +9,16 @@ else:
     # from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support.ui import WebDriverWait
-from modules.helpers import find_default_profile_directory, critical_error_log, print_lg
+from modules.helpers import find_default_profile_directory, critical_error_log, print_lg, show_alert
 from selenium.common.exceptions import SessionNotCreatedException, NoSuchWindowException
 import time
 
 
 def createChromeSession(isRetry: bool = False):
-    make_directories([file_name, failed_file_name,
-                     default_resume_path, generated_resume_path+"/temp"])
+    paths_to_prepare = [file_name, failed_file_name, generated_resume_path+"/temp"]
+    if default_resume_path:
+        paths_to_prepare.append(default_resume_path)
+    make_directories(paths_to_prepare)
     # Set up WebDriver with Chrome Profile
     options = uc.ChromeOptions() if stealth_mode else Options()
     if run_in_background:
@@ -69,8 +71,7 @@ except Exception as e:
         msg = "Couldn't download Chrome-driver. Set stealth_mode = False in config!"
     print_lg(msg)
     critical_error_log("In Opening Chrome", e)
-    from pyautogui import alert
-    alert(msg, "Error in opening chrome")
+    show_alert(msg, "Error in opening chrome")
     try:
         if driver is not None:
             driver.quit()

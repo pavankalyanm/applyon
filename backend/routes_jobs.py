@@ -16,6 +16,7 @@ def list_jobs(
     search: str | None = None,
     pipeline_status: str | None = Query(default=None),
     status: str | None = Query(default=None),
+    provider: str | None = Query(default=None),
     current_user: models.User = Depends(get_current_user),
     session: Session = Depends(db.get_session),
 ):
@@ -37,6 +38,9 @@ def list_jobs(
 
     if status:
         q = q.filter(models.JobApplication.status == status)
+
+    if provider:
+        q = q.filter(models.JobApplication.application_provider == provider)
 
     total = q.count()
     items = (

@@ -5,6 +5,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base, Session
+from typing import Generator
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -19,15 +20,19 @@ DB_URL = os.getenv(
     "mysql+pymysql://root:@localhost:3306/easy-apply",
 )
 
-engine = create_engine(DB_URL, echo=False, future=True)
+engine = create_engine(DB_URL, echo=False, future=True, pool_pre_ping=True)
 SessionLocal = sessionmaker(
     bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
 
 Base = declarative_base()
 
 
-def get_session() -> Session:
-    return SessionLocal()
+def get_session() -> Generator[Session, None, None]:
+    session = SessionLocal()
+    try:
+        yield session
+    finally:
+        session.close()
 
 
 @contextmanager

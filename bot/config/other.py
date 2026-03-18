@@ -1,4 +1,4 @@
 from ._runtime import export_section
 
 
-export_section("personals", globals())
+export_section("other", globals())

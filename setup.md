@@ -208,6 +208,25 @@ python bot/runAiBot.py
 
 The bot will open Chrome and begin applying to jobs based on your config.
 
+### 7.1 Using Groq as the AI provider
+
+This project can use Groq's OpenAI-compatible API so you can run models like Llama 3.3 70B:
+
+- Get a Groq API key from their dashboard.
+- In `backend/.env`, set:
+
+```env
+GROQ_API_KEY=your_groq_api_key_here
+```
+
+- In the web dashboard under **Settings → Secrets**, configure:
+  - `ai_provider`: `groq`
+  - `LLM API URL`: `https://api.groq.com/openai/v1`
+  - `LLM model`: e.g. `llama-3.3-70b-versatile`
+  - `LLM spec`: `openai`
+
+The backend will inject `GROQ_API_KEY` into the bot's runtime config so the key is not stored in the database.
+
 ---
 
 ## 8. Common Issues & Tips

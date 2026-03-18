@@ -4,14 +4,14 @@ import os
 import sys
 import json
 import pathlib
+import pyautogui
 
 from time import sleep
 from random import randint
 from datetime import datetime, timedelta
-from pyautogui import alert
 from pprint import pprint
 
-from config.settings import logs_folder_path
+from config.settings import logs_folder_path, run_in_background
 
 
 #### Common functions ####
@@ -116,6 +116,34 @@ def get_log_path():
 __logs_file_path = get_log_path()
 
 
+def dialogs_enabled() -> bool:
+    return not bool(os.getenv("BOT_DISABLE_DIALOGS") or run_in_background)
+
+
+def show_alert(message: str, title: str = "Alert", button: str = "OK"):
+    if not dialogs_enabled():
+        print(f"\n[{title}] {message}\n(No dialog shown; continuing with: {button})\n")
+        return button
+    try:
+        return pyautogui.alert(message, title, button)
+    except Exception:
+        print(f"\n[{title}] {message}\n(No dialog available; continuing with: {button})\n")
+        return button
+
+
+def show_confirm(message: str, title: str = "Confirm", buttons: list[str] | tuple[str, ...] | None = None):
+    resolved_buttons = list(buttons) if buttons else ["OK"]
+    default = resolved_buttons[-1] if resolved_buttons else "OK"
+    if not dialogs_enabled():
+        print(f"\n[{title}] {message}\n(No dialog shown; continuing with: {default})\n")
+        return default
+    try:
+        return pyautogui.confirm(message, title, resolved_buttons)
+    except Exception:
+        print(f"\n[{title}] {message}\n(No dialog available; continuing with: {default})\n")
+        return default
+
+
 def print_lg(*msgs: str | dict, end: str = "\n", pretty: bool = False, flush: bool = False, from_critical: bool = False) -> None:
     '''
     Function to log and print. **Note that, `end` and `flush` parameters are ignored if `pretty = True`**
@@ -127,7 +155,7 @@ def print_lg(*msgs: str | dict, end: str = "\n", pretty: bool = False, flush: bo
                 file.write(str(message) + end)
     except Exception as e:
         trail = f'Skipped saving this message: "{message}" to log.txt!' if from_critical else "We'll try one more time to log..."
-        alert(
+        show_alert(
             f"log.txt in {logs_folder_path} is open or is occupied by another program! Please close it! {trail}", "Failed Logging")
         if not from_critical:
             critical_error_log(
@@ -170,7 +198,6 @@ def manual_login_retry(is_logged_in: callable, limit: int = 2) -> None:
     '''
     count = 0
     while not is_logged_in():
-        from pyautogui import alert
         print_lg("Seems like you're not logged in!")
         button = "Confirm Login"
         message = 'After you successfully Log In, please click "{}" button below.'.format(
@@ -180,7 +207,7 @@ def manual_login_retry(is_logged_in: callable, limit: int = 2) -> None:
             message = 'If you\'re seeing this message even after you logged in, Click "{}". Seems like auto login confirmation failed!'.format(
                 button)
         count += 1
-        if alert(message, "Login Required", button) and count > limit:
+        if show_alert(message, "Login Required", button) and count > limit:
             return
 
 

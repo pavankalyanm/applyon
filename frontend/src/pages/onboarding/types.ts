@@ -15,7 +15,6 @@ export type PersonalsConfig = {
 }
 
 export type QuestionsConfig = {
-  default_resume_path: string
   years_of_experience: string
   require_visa: string
   website: string
@@ -88,7 +87,7 @@ export type SettingsConfig = {
 }
 
 export type ResumeConfig = {
-  default_resume_path?: string
+  default_resume_id?: string | null
 }
 
 export type SecretsConfig = {
@@ -102,6 +101,49 @@ export type SecretsConfig = {
   llm_spec: string
   stream_output: boolean
 }
+
+export const aiProviderPresets = {
+  openai: {
+    label: 'OpenAI',
+    apiKeyLabel: 'OpenAI API key',
+    apiKeyHelper: 'Enter your OpenAI API key.',
+    llmApiUrl: 'https://api.openai.com/v1/',
+    llmModel: 'gpt-4o-mini',
+    llmSpec: 'openai',
+    showApiUrl: true,
+    showSpec: true,
+  },
+  groq: {
+    label: 'Groq',
+    apiKeyLabel: 'Groq API key',
+    apiKeyHelper: 'Enter your Groq API key, or leave it blank to use GROQ_API_KEY from the backend environment.',
+    llmApiUrl: 'https://api.groq.com/openai/v1',
+    llmModel: 'llama-3.3-70b-versatile',
+    llmSpec: 'openai',
+    showApiUrl: true,
+    showSpec: true,
+  },
+  deepseek: {
+    label: 'DeepSeek',
+    apiKeyLabel: 'DeepSeek API key',
+    apiKeyHelper: 'Enter your DeepSeek API key.',
+    llmApiUrl: 'https://api.deepseek.com/v1',
+    llmModel: 'deepseek-chat',
+    llmSpec: 'openai',
+    showApiUrl: true,
+    showSpec: true,
+  },
+  gemini: {
+    label: 'Gemini',
+    apiKeyLabel: 'Gemini API key',
+    apiKeyHelper: 'Enter your Gemini API key.',
+    llmApiUrl: 'https://generativelanguage.googleapis.com/',
+    llmModel: 'gemini-1.5-flash',
+    llmSpec: 'gemini',
+    showApiUrl: false,
+    showSpec: false,
+  },
+} as const
 
 export type ConfigResponse = {
   id: number
@@ -129,7 +171,6 @@ export const defaultPersonals: PersonalsConfig = {
 }
 
 export const defaultQuestions: QuestionsConfig = {
-  default_resume_path: 'modules/resumes/default/resume.pdf',
   years_of_experience: '',
   require_visa: '',
   website: '',
@@ -202,7 +243,7 @@ export const defaultSettings: SettingsConfig = {
 }
 
 export const defaultResume: ResumeConfig = {
-  default_resume_path: 'modules/resumes/default/resume.pdf',
+  default_resume_id: null,
 }
 
 export const defaultSecrets: SecretsConfig = {
@@ -210,10 +251,10 @@ export const defaultSecrets: SecretsConfig = {
   password: '',
   use_AI: false,
   ai_provider: 'openai',
-  llm_api_url: 'https://api.openai.com/v1/',
+  llm_api_url: aiProviderPresets.openai.llmApiUrl,
   llm_api_key: '',
-  llm_model: 'gpt-4o-mini',
-  llm_spec: 'openai',
+  llm_model: aiProviderPresets.openai.llmModel,
+  llm_spec: aiProviderPresets.openai.llmSpec,
   stream_output: false,
 }
 
@@ -233,4 +274,3 @@ export function multilineToList(value: string): string[] {
 export function listToMultiline(list: string[]): string {
   return list.join('\n')
 }
-

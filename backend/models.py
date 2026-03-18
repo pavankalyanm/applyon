@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 
 from .db import Base
@@ -20,6 +20,7 @@ class User(Base):
     configs = relationship("Config", back_populates="user", uselist=False)
     runs = relationship("Run", back_populates="user")
     job_applications = relationship("JobApplication", back_populates="user")
+    resumes = relationship("Resume", back_populates="user")
 
 
 class Config(Base):
@@ -38,6 +39,7 @@ class Config(Base):
     search = Column(Text, nullable=True)
     settings = Column(Text, nullable=True)
     resume = Column(Text, nullable=True)
+    other = Column(Text, nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow,
@@ -69,6 +71,22 @@ class Run(Base):
     job_applications = relationship("JobApplication", back_populates="run")
 
 
+class Resume(Base):
+    __tablename__ = "resumes"
+
+    id = Column(String(36), primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+
+    label = Column(String(255), nullable=False)
+    path = Column(Text, nullable=False)
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow,
+                        onupdate=datetime.utcnow, nullable=False)
+
+    user = relationship("User", back_populates="resumes")
+
+
 class JobApplication(Base):
     __tablename__ = "job_applications"
 
@@ -88,6 +106,9 @@ class JobApplication(Base):
 
     # easy_apply / external
     application_type = Column(String(20), nullable=True)
+    application_provider = Column(String(50), nullable=True)
+    application_stage = Column(String(30), nullable=True)
+    review_required = Column(Boolean, nullable=False, default=False)
     status = Column(String(20), nullable=False,
                     default="applied")  # applied/skipped/failed
     # applied/assessment/interview/rejected

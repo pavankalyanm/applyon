@@ -1,9 +1,8 @@
 """Backend-side bot runner.
 
-- Writes per-user `config/*.py` override files from DB JSON.
-- Runs `bot/runAiBot.py` with `PYTHONPATH` pointing to:
-  1) per-user override dir (so `import config.*` resolves to overrides)
-  2) `bot/` (so `import modules.*` and fallback `config.*` work)
+- Reads the latest per-user config snapshot from the database at run start.
+- Writes a single runtime JSON snapshot file for the bot process.
+- Runs `bot/runAiBot.py` with `BOT_CONFIG_PATH` pointing to that snapshot.
 - Captures stdout and stores a rolling excerpt on the Run.
 
 This is designed to evolve into a separate worker service later.
@@ -13,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import signal
 import shutil
 import subprocess
@@ -23,7 +23,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from sqlalchemy import MetaData, Table
+from sqlalchemy import MetaData, Table, and_, select
 
 from . import db, models
 
@@ -37,41 +37,122 @@ RUNTIME_DIR = PROJECT_ROOT / "bot_runtime"
 def _user_runtime_dir(user_id: int) -> Path:
     return RUNTIME_DIR / f"user_{user_id}"
 
+
 def _run_stop_file(user_id: int, run_id: int) -> Path:
     d = _user_runtime_dir(user_id) / "runs"
     d.mkdir(parents=True, exist_ok=True)
     return d / f"run_{run_id}.stop"
 
 
-def _user_config_dir(user_id: int) -> Path:
-    return _user_runtime_dir(user_id) / "config"
+def _run_config_file(user_id: int, run_id: int) -> Path:
+    d = _user_runtime_dir(user_id) / "runs"
+    d.mkdir(parents=True, exist_ok=True)
+    return d / f"run_{run_id}.config.json"
 
 
-def _write_user_configs(user: models.User) -> None:
-    cfg_dir = _user_config_dir(user.id)
-    cfg_dir.mkdir(parents=True, exist_ok=True)
+def _load_config_section(raw_value: Optional[str], section_name: str) -> dict:
+    if not raw_value:
+        raise RuntimeError(
+            f"Backend config section '{section_name}' is missing. "
+            "Update it in the dashboard (or via the /config API) and retry."
+        )
+    try:
+        data = json.loads(raw_value)
+    except Exception as exc:
+        raise RuntimeError(
+            f"Backend config section '{section_name}' is not valid JSON: {exc}. "
+            "Fix it in the dashboard (or via the /config API) and retry."
+        ) from exc
+    if not isinstance(data, dict):
+        raise RuntimeError(
+            f"Backend config section '{section_name}' must be a JSON object (key/value). "
+            "Fix it in the dashboard (or via the /config API) and retry."
+        )
+    return data
 
+
+def _load_optional_config_section(raw_value: Optional[str], section_name: str) -> dict:
+    if not raw_value:
+        return {}
+    return _load_config_section(raw_value, section_name)
+
+
+def _build_run_config_snapshot(user_id: int) -> dict:
     with db.session_scope() as session:
-        cfg = session.query(models.Config).filter(models.Config.user_id == user.id).one_or_none()
+        cfg = session.query(models.Config).filter(models.Config.user_id == user_id).one_or_none()
         if cfg is None:
-            return
+            raise RuntimeError(
+                "No backend config found for this user. Complete onboarding (or save via /config) and retry."
+            )
 
-        def write_if_present(module_name: str, value: Optional[str]) -> None:
-            if not value:
-                return
-            target = cfg_dir / f"{module_name}.py"
-            data = json.loads(value)
-            if isinstance(data, dict):
-                lines = [f"# Auto-generated overrides for user {user.id}"]
-                for k, v in data.items():
-                    lines.append(f"{k} = {json.dumps(v, ensure_ascii=False)}")
-                target.write_text("\n".join(lines), encoding="utf-8")
+        settings = dict(_load_config_section(cfg.settings, "settings"))
+        secrets = settings.pop("secrets", None)
+        if not isinstance(secrets, dict) or not secrets:
+            raise RuntimeError(
+                "Backend config section 'secrets' is missing. "
+                "Update Secrets in the dashboard (Onboarding/Settings) and retry."
+            )
 
-        write_if_present("personals", cfg.personals)
-        write_if_present("questions", cfg.questions)
-        write_if_present("search", cfg.search)
-        write_if_present("settings", cfg.settings)
-        write_if_present("resume", cfg.resume)
+        # If a provider-specific API key exists in the backend environment, prefer it over DB storage.
+        try:
+            provider = str(secrets.get("ai_provider", "")).lower()
+        except Exception:
+            provider = ""
+        provider_env_keys = {
+            "openai": "OPENAI_API_KEY",
+            "groq": "GROQ_API_KEY",
+            "deepseek": "DEEPSEEK_API_KEY",
+            "gemini": "GEMINI_API_KEY",
+        }
+        env_key_name = provider_env_keys.get(provider)
+        if env_key_name:
+            env_api_key = os.getenv(env_key_name, "").strip()
+            if env_api_key:
+                secrets["llm_api_key"] = env_api_key
+
+        # Merge resume-derived default path into questions so the bot uses the selected resume
+        questions = dict(_load_config_section(cfg.questions, "questions"))
+        resume_cfg = _load_optional_config_section(cfg.resume, "resume")
+        try:
+            default_resume_id = resume_cfg.get("default_resume_id")
+            default_resume = None
+            if default_resume_id:
+                default_resume = (
+                    session.query(models.Resume)
+                    .filter(models.Resume.user_id == user_id, models.Resume.id == default_resume_id)
+                    .one_or_none()
+                )
+            if default_resume is None:
+                default_resume = (
+                    session.query(models.Resume)
+                    .filter(models.Resume.user_id == user_id)
+                    .order_by(models.Resume.created_at.desc())
+                    .first()
+                )
+
+            selected_resume_path = default_resume.path if default_resume else ""
+            selected_resume_id = default_resume.id if default_resume else None
+            questions["default_resume_path"] = selected_resume_path
+            resume_cfg = {
+                "default_resume_id": selected_resume_id,
+                "selected_resume_path": selected_resume_path,
+            }
+        except Exception:
+            questions["default_resume_path"] = ""
+            resume_cfg = {
+                "default_resume_id": resume_cfg.get("default_resume_id"),
+                "selected_resume_path": "",
+            }
+
+        return {
+            "personals": _load_config_section(cfg.personals, "personals"),
+            "questions": questions,
+            "search": _load_config_section(cfg.search, "search"),
+            "settings": settings,
+            "resume": resume_cfg,
+            "other": _load_optional_config_section(cfg.other, "other"),
+            "secrets": secrets,
+        }
 
 
 def start_run(run_id: int) -> None:
@@ -80,33 +161,64 @@ def start_run(run_id: int) -> None:
 
 
 def _mark_run_failed(run_id: int, error_message: str) -> None:
-    with db.session_scope() as session:
-        run = session.query(models.Run).filter(models.Run.id == run_id).one_or_none()
-        if run is None:
-            return
-        run.finished_at = datetime.utcnow()
-        run.status = "failed"
-        run.error_message = error_message[:2000]
-        session.commit()
+    try:
+        with db.session_scope() as session:
+            run = session.query(models.Run).filter(models.Run.id == run_id).one_or_none()
+            if run is None:
+                return
+            run.finished_at = datetime.utcnow()
+            run.status = "failed"
+            run.error_message = error_message[:2000]
+            session.commit()
+    except Exception as exc:
+        print(f"[bot_runner] Failed to mark run {run_id} as failed: {exc}", file=sys.stderr)
 
 
 def _persist_run_logs(run_id: int, log_lines: list[str]) -> None:
-    with db.session_scope() as session:
-        run = session.query(models.Run).filter(models.Run.id == run_id).one_or_none()
-        if run is None:
-            return
-        run.log_excerpt = "\n".join(log_lines)
-        session.commit()
+    try:
+        with db.session_scope() as session:
+            run = session.query(models.Run).filter(models.Run.id == run_id).one_or_none()
+            if run is None:
+                return
+            run.log_excerpt = "\n".join(log_lines)
+            session.commit()
+    except Exception as exc:
+        print(f"[bot_runner] Failed to persist logs for run {run_id}: {exc}", file=sys.stderr)
 
 
 def _persist_job_event(run_id: int, user_id: int, ev: dict) -> None:
+    kind = ev.get("event")
+    if kind == "learned_answer":
+        _persist_learned_answer_event(user_id, ev)
+        return
+
     metadata = MetaData()
     jobs_table = Table("job_applications", metadata, autoload_with=db.engine)
     available = set(jobs_table.columns.keys())
 
-    kind = ev.get("event")
-    if kind not in {"job_applied", "job_failed"}:
+    if kind not in {"job_progress", "job_review_required", "job_applied", "job_failed"}:
         return
+
+    provider = ev.get("application_provider")
+    if not provider:
+        provider = "linkedin_easy_apply" if ev.get("application_link") == "Easy Applied" else "external"
+
+    stage = ev.get("application_stage")
+    if not stage:
+        if kind == "job_review_required":
+            stage = "review_pending"
+        elif kind == "job_applied":
+            stage = "submitted"
+        elif kind == "job_failed":
+            stage = "failed"
+        else:
+            stage = "detected"
+
+    status = ev.get("status")
+    if not status:
+        status = "failed" if kind == "job_failed" else "applied"
+
+    review_required = bool(ev.get("review_required"))
 
     values = {
         "run_id": run_id,
@@ -118,9 +230,12 @@ def _persist_job_event(run_id: int, user_id: int, ev: dict) -> None:
         "work_style": ev.get("work_style"),
         "date_posted": _parse_event_datetime(ev.get("date_posted")),
         "date_applied": _parse_event_datetime(ev.get("date_applied")),
-        "application_type": "easy_apply" if ev.get("application_link") == "Easy Applied" else "external",
-        "status": "applied" if kind == "job_applied" else "failed",
-        "pipeline_status": "applied" if kind == "job_applied" else "rejected",
+        "application_type": "easy_apply" if provider == "linkedin_easy_apply" else "external",
+        "application_provider": provider,
+        "application_stage": stage,
+        "review_required": review_required,
+        "status": status,
+        "pipeline_status": ev.get("pipeline_status") or ("rejected" if kind == "job_failed" else "applied"),
         "reason_skipped": ev.get("reason"),
         "job_link": ev.get("job_link"),
         "external_link": ev.get("external_link") or ev.get("application_link"),
@@ -130,7 +245,38 @@ def _persist_job_event(run_id: int, user_id: int, ev: dict) -> None:
     filtered_values = {key: value for key, value in values.items() if key in available}
 
     with db.engine.begin() as connection:
-        connection.execute(jobs_table.insert().values(**filtered_values))
+        lookup_conditions = [
+            jobs_table.c.run_id == run_id,
+            jobs_table.c.user_id == user_id,
+        ]
+        if ev.get("job_id") and "job_id" in available:
+            lookup_conditions.append(jobs_table.c.job_id == ev.get("job_id"))
+        elif ev.get("job_link") and "job_link" in available:
+            lookup_conditions.append(jobs_table.c.job_link == ev.get("job_link"))
+        elif (ev.get("external_link") or ev.get("application_link")) and "external_link" in available:
+            lookup_conditions.append(
+                jobs_table.c.external_link == (ev.get("external_link") or ev.get("application_link"))
+            )
+        else:
+            if "title" in available:
+                lookup_conditions.append(jobs_table.c.title == ev.get("title"))
+            if "company" in available:
+                lookup_conditions.append(jobs_table.c.company == ev.get("company"))
+
+        existing_id = connection.execute(
+            select(jobs_table.c.id).where(and_(*lookup_conditions)).order_by(jobs_table.c.id.desc()).limit(1)
+        ).scalar_one_or_none()
+
+        if existing_id is None:
+            connection.execute(jobs_table.insert().values(**filtered_values))
+            return
+
+        updates = {key: value for key, value in filtered_values.items() if key not in {"created_at"}}
+        if kind in {"job_progress", "job_review_required"} and "date_applied" in updates and updates["date_applied"] is None:
+            updates.pop("date_applied")
+        connection.execute(
+            jobs_table.update().where(jobs_table.c.id == existing_id).values(**updates)
+        )
 
 
 def _resolve_python_path(env: dict[str, str]) -> str:
@@ -142,6 +288,53 @@ def _resolve_python_path(env: dict[str, str]) -> str:
         if resolved:
             return resolved
     return sys.executable or "python"
+
+
+def _process_is_alive(pid: int) -> bool:
+    if not pid:
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+
+def _mark_run_stopped_now(run_id: int) -> None:
+    with db.session_scope() as session:
+        run = session.query(models.Run).filter(models.Run.id == run_id).one_or_none()
+        if run is None or run.finished_at is not None:
+            return
+        run.status = "stopped"
+        run.finished_at = datetime.utcnow()
+        session.commit()
+
+
+def _validate_backend_config_imports(*, python_exe: str, project_root: Path, env: dict[str, str]) -> tuple[bool, str]:
+    """
+    Ensure the backend runtime snapshot is importable through `config.*`.
+    """
+    cmd = [
+        python_exe,
+        "-c",
+        (
+            "import config.personals, config.questions, config.search, config.settings, config.resume, config.other, config.secrets; "
+            "print('OK')"
+        ),
+    ]
+    check = subprocess.run(
+        cmd,
+        cwd=str(project_root),
+        env=env,
+        text=True,
+        capture_output=True,
+    )
+    if check.returncode == 0:
+        return True, (check.stdout or "").strip()
+    out = (check.stdout or "").strip()
+    err = (check.stderr or "").strip()
+    msg = "\n".join([x for x in [out, err] if x])
+    return False, (msg or f"Config import validation failed with code {check.returncode}")
 
 
 def _parse_event_datetime(value: object) -> Optional[datetime]:
@@ -166,26 +359,126 @@ def _parse_event_datetime(value: object) -> Optional[datetime]:
     return dt
 
 
+def _normalize_learned_question(value: object) -> str:
+    text = str(value or "").strip().lower()
+    text = re.sub(r"\s+", " ", text)
+    return text
+
+
+def _persist_learned_answer_event(user_id: int, ev: dict) -> None:
+    question = str(ev.get("question") or ev.get("label") or "").strip()
+    answer = str(ev.get("answer") or "").strip()
+    if not question or not answer:
+        return
+
+    question_type = str(ev.get("question_type") or "text").strip().lower() or "text"
+    provider = str(ev.get("provider") or ev.get("application_provider") or "").strip().lower()
+    normalized_question = _normalize_learned_question(question)
+    if not normalized_question:
+        return
+
+    try:
+        options = ev.get("options")
+        if not isinstance(options, list):
+            options = []
+        clean_options = [str(option).strip() for option in options if str(option).strip()]
+    except Exception:
+        clean_options = []
+
+    now = datetime.utcnow().isoformat() + "Z"
+    with db.session_scope() as session:
+        cfg = session.query(models.Config).filter(models.Config.user_id == user_id).one_or_none()
+        if cfg is None:
+            cfg = models.Config(user_id=user_id)
+            session.add(cfg)
+            session.flush()
+
+        other = _load_optional_config_section(cfg.other, "other")
+        learned_answers = other.get("learned_answers")
+        if not isinstance(learned_answers, list):
+            learned_answers = []
+
+        existing_entry = None
+        for item in learned_answers:
+            if not isinstance(item, dict):
+                continue
+            if (
+                _normalize_learned_question(item.get("normalized_question") or item.get("question")) == normalized_question
+                and str(item.get("question_type") or "text").strip().lower() == question_type
+                and str(item.get("provider") or "").strip().lower() == provider
+            ):
+                existing_entry = item
+                break
+
+        if existing_entry is None:
+            existing_entry = {
+                "question": question,
+                "normalized_question": normalized_question,
+                "answer": answer,
+                "question_type": question_type,
+                "provider": provider,
+                "options": clean_options,
+                "created_at": now,
+                "updated_at": now,
+                "usage_count": 1,
+                "source": "manual_external_review",
+            }
+            learned_answers.append(existing_entry)
+        else:
+            existing_entry["question"] = question
+            existing_entry["normalized_question"] = normalized_question
+            existing_entry["answer"] = answer
+            existing_entry["question_type"] = question_type
+            existing_entry["provider"] = provider
+            if clean_options:
+                existing_entry["options"] = clean_options
+            existing_entry["updated_at"] = now
+            existing_entry["usage_count"] = int(existing_entry.get("usage_count") or 0) + 1
+
+        other["learned_answers"] = learned_answers[-300:]
+        cfg.other = json.dumps(other)
+        session.add(cfg)
+
+
 def _run_worker(run_id: int) -> None:
     try:
+        snapshot: dict
         with db.session_scope() as session:
             run = session.query(models.Run).filter(models.Run.id == run_id).one_or_none()
             if run is None:
                 return
             user = session.query(models.User).filter(models.User.id == run.user_id).one()
+            snapshot = _build_run_config_snapshot(user.id)
             run.status = "running"
             run.started_at = datetime.utcnow()
+            run.config_snapshot = json.dumps(snapshot)
             session.commit()
 
-        _write_user_configs(user)
+        config_path = _run_config_file(user.id, run_id)
+        config_path.write_text(json.dumps(snapshot), encoding="utf-8")
 
         env = os.environ.copy()
-        override_parent = str(_user_runtime_dir(user.id))
-        env["PYTHONPATH"] = f"{override_parent}:{BOT_DIR}:{env.get('PYTHONPATH', '')}"
+        env["PYTHONPATH"] = f"{BOT_DIR}:{env.get('PYTHONPATH', '')}"
         env["BOT_STOP_FILE"] = str(_run_stop_file(user.id, run_id))
+        env["BOT_CONFIG_PATH"] = str(config_path)
+        if bool(snapshot.get("settings", {}).get("run_in_background")):
+            env["BOT_DISABLE_DIALOGS"] = "1"
+        else:
+            env.pop("BOT_DISABLE_DIALOGS", None)
         env["PYTHONUNBUFFERED"] = "1"
 
-        cmd = [_resolve_python_path(env), "-u", str(BOT_ENTRY)]
+        python_exe = _resolve_python_path(env)
+
+        ok, detail = _validate_backend_config_imports(
+            python_exe=python_exe,
+            project_root=PROJECT_ROOT,
+            env=env,
+        )
+        if not ok:
+            _mark_run_failed(run_id, detail)
+            return
+
+        cmd = [python_exe, "-u", str(BOT_ENTRY)]
         process = subprocess.Popen(
             cmd,
             cwd=str(PROJECT_ROOT),
@@ -269,12 +562,7 @@ def force_kill(run_id: int) -> None:
         session.commit()
     _run_stop_file(user_id, run_id).write_text("stop", encoding="utf-8")
     if not pid:
-        with db.session_scope() as session:
-            run = session.query(models.Run).filter(models.Run.id == run_id).one_or_none()
-            if run is not None and run.finished_at is None:
-                run.status = "stopped"
-                run.finished_at = datetime.utcnow()
-                session.commit()
+        _mark_run_stopped_now(run_id)
         return
     try:
         os.killpg(pid, signal.SIGTERM)
@@ -282,18 +570,25 @@ def force_kill(run_id: int) -> None:
         try:
             os.kill(pid, signal.SIGTERM)
         except Exception:
+            _mark_run_stopped_now(run_id)
             return
     deadline = time.monotonic() + 2.0
     while time.monotonic() < deadline:
-        try:
-            os.killpg(pid, 0)
-            time.sleep(0.1)
-        except Exception:
+        if not _process_is_alive(pid):
             break
+        time.sleep(0.1)
     try:
         os.killpg(pid, signal.SIGKILL)
     except Exception:
         try:
             os.kill(pid, signal.SIGKILL)
         except Exception:
+            if not _process_is_alive(pid):
+                _mark_run_stopped_now(run_id)
             return
+    deadline = time.monotonic() + 2.0
+    while time.monotonic() < deadline:
+        if not _process_is_alive(pid):
+            _mark_run_stopped_now(run_id)
+            return
+        time.sleep(0.1)

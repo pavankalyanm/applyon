@@ -4,6 +4,7 @@ from modules.validator import validate_config
 from modules.clickers_and_finders import *
 from modules.helpers import *
 from modules.open_chrome import *
+from modules.external_apply.adapters import ExternalApplyContext, ExternalApplyResult, detect_adapter
 from config.settings import *
 from config.secrets import use_AI, username, password, ai_provider
 from config.search import *
@@ -27,42 +28,67 @@ import json
 # Use a fallback when Tkinter is missing (e.g. Homebrew Python on macOS without python-tk)
 
 
+BOT_STOP_FILE = os.getenv("BOT_STOP_FILE", "")
+BOT_CONFIG_PATH = os.getenv("BOT_CONFIG_PATH", "")
+BOT_DISABLE_DIALOGS = bool(os.getenv("BOT_DISABLE_DIALOGS") or run_in_background)
+
+
+def should_stop() -> bool:
+    return bool(BOT_STOP_FILE) and os.path.exists(BOT_STOP_FILE)
+
+
+class StopRequested(Exception):
+    pass
+
+
+def _dialog_text(args, kwargs) -> tuple[str, str]:
+    msg = kwargs.get("text", args[0] if args else "")
+    title_arg = args[1] if len(args) > 1 and isinstance(args[1], str) else "Alert"
+    title = kwargs.get("title", title_arg)
+    return str(msg), str(title)
+
+
+def _dialog_buttons(args, kwargs) -> list[str]:
+    if len(args) >= 3 and isinstance(args[2], (list, tuple)):
+        return list(args[2])
+    if len(args) >= 3 and isinstance(args[2], str):
+        return [args[2]]
+    if len(args) >= 2 and isinstance(args[1], (list, tuple)):
+        return list(args[1])
+    buttons = kwargs.get("buttons")
+    if isinstance(buttons, (list, tuple)):
+        return list(buttons)
+    button = kwargs.get("button")
+    if button:
+        return [str(button)]
+    return ["OK"]
+
+
 def _safe_alert(*args, **kwargs):
+    msg, title = _dialog_text(args, kwargs)
+    button = _dialog_buttons(args, kwargs)[-1]
+    if BOT_DISABLE_DIALOGS or should_stop():
+        print(f"\n[{title}] {msg}\n(No dialog shown; continuing with: {button})\n")
+        return button
     try:
         return pyautogui._original_alert(*args, **kwargs)
-    except AssertionError as e:
-        if "Tkinter" in str(e) or "pymsgbox" in str(e).lower():
-            msg = kwargs.get("text", args[0] if args else "")
-            title = kwargs.get("title", args[1] if len(args) > 1 else "Alert")
-            print(f"\n[{title}] {msg}\n")
-        else:
-            raise
+    except Exception:
+        print(f"\n[{title}] {msg}\n(No dialog available; continuing with: {button})\n")
+        return button
 
 
 def _safe_confirm(*args, **kwargs):
+    msg, title = _dialog_text(args, kwargs)
+    buttons = _dialog_buttons(args, kwargs)
+    default = buttons[-1] if buttons else "OK"
+    if BOT_DISABLE_DIALOGS or should_stop():
+        print(f"\n[{title}] {msg}\n(No dialog shown; continuing with: {default})\n")
+        return default
     try:
         return pyautogui._original_confirm(*args, **kwargs)
-    except AssertionError as e:
-        if "Tkinter" in str(e) or "pymsgbox" in str(e).lower():
-            msg = kwargs.get("text", args[0] if args else "")
-            # confirm() can be (text, title, buttons) or (text, buttons)
-            if len(args) >= 3:
-                title = args[1]
-                buttons = args[2]
-            elif len(args) == 2:
-                title = "Confirm"
-                buttons = args[1] if isinstance(
-                    args[1], (list, tuple)) else ["OK"]
-            else:
-                title = "Confirm"
-                buttons = kwargs.get("buttons", ["OK"])
-            default = buttons[-1] if isinstance(buttons,
-                                                (list, tuple)) and buttons else "OK"
-            print(
-                f"\n[{title}] {msg}\n(No dialog available; continuing with: {default})\n")
-            return default
-        else:
-            raise
+    except Exception:
+        print(f"\n[{title}] {msg}\n(No dialog available; continuing with: {default})\n")
+        return default
 
 
 pyautogui._original_alert = pyautogui.alert
@@ -70,22 +96,40 @@ pyautogui.alert = _safe_alert
 pyautogui._original_confirm = pyautogui.confirm
 pyautogui.confirm = _safe_confirm
 
-# Graceful stop support (triggered by backend via BOT_STOP_FILE env var)
-BOT_STOP_FILE = os.getenv("BOT_STOP_FILE", "")
+def ensure_not_stopping(context: str | None = None) -> None:
+    if not should_stop():
+        return
+    if context:
+        print_step("Stop requested", context)
+    else:
+        print_lg("Stop requested. Exiting current flow.")
+    raise StopRequested(context or "Stop requested")
 
 
-def should_stop() -> bool:
-    return bool(BOT_STOP_FILE) and os.path.exists(BOT_STOP_FILE)
+def sleep_with_stop(seconds: float, interval: float = 0.25) -> None:
+    deadline = time.monotonic() + max(seconds, 0)
+    while time.monotonic() < deadline:
+        ensure_not_stopping()
+        remaining = deadline - time.monotonic()
+        time.sleep(min(interval, max(remaining, 0)))
 
 
 # Set CSV field size limit to prevent field size errors
 csv.field_size_limit(1000000)  # Set to 1MB instead of default 131KB
 
 
+ai_create_openai_client = ai_extract_skills = ai_answer_question = ai_close_openai_client = None
+deepseek_create_client = deepseek_extract_skills = deepseek_answer_question = None
+gemini_create_client = gemini_extract_skills = gemini_answer_question = None
+
 if use_AI:
-    from modules.ai.openaiConnections import ai_create_openai_client, ai_extract_skills, ai_answer_question, ai_close_openai_client
-    from modules.ai.deepseekConnections import deepseek_create_client, deepseek_extract_skills, deepseek_answer_question
-    from modules.ai.geminiConnections import gemini_create_client, gemini_extract_skills, gemini_answer_question
+    selected_ai_provider = str(ai_provider).lower()
+    if selected_ai_provider in ["openai", "groq"]:
+        from modules.ai.openaiConnections import ai_create_openai_client, ai_extract_skills, ai_answer_question, ai_close_openai_client
+    elif selected_ai_provider == "deepseek":
+        from modules.ai.deepseekConnections import deepseek_create_client, deepseek_extract_skills, deepseek_answer_question
+    elif selected_ai_provider == "gemini":
+        from modules.ai.geminiConnections import gemini_create_client, gemini_extract_skills, gemini_answer_question
 
 
 pyautogui.FAILSAFE = False
@@ -118,17 +162,26 @@ dailyEasyApplyLimitReached = False
 re_experience = re.compile(
     r'[(]?\s*(\d+)\s*[)]?\s*[-to]*\s*\d*[+]*\s*year[s]?', re.IGNORECASE)
 
-desired_salary_lakhs = str(round(desired_salary / 100000, 2))
-desired_salary_monthly = str(round(desired_salary/12, 2))
-desired_salary = str(desired_salary)
+def _normalize_currency_answers(value):
+    if value is None:
+        return "", "", ""
+    numeric = float(value)
+    whole = str(int(numeric)) if numeric.is_integer() else str(numeric)
+    lakhs = str(round(numeric / 100000, 2))
+    monthly = str(round(numeric / 12, 2))
+    return lakhs, monthly, whole
 
-current_ctc_lakhs = str(round(current_ctc / 100000, 2))
-current_ctc_monthly = str(round(current_ctc/12, 2))
-current_ctc = str(current_ctc)
 
-notice_period_months = str(notice_period//30)
-notice_period_weeks = str(notice_period//7)
-notice_period = str(notice_period)
+def _normalize_duration_answers(value):
+    if value is None:
+        return "", "", ""
+    numeric = int(value)
+    return str(numeric // 30), str(numeric // 7), str(numeric)
+
+
+desired_salary_lakhs, desired_salary_monthly, desired_salary = _normalize_currency_answers(desired_salary)
+current_ctc_lakhs, current_ctc_monthly, current_ctc = _normalize_currency_answers(current_ctc)
+notice_period_months, notice_period_weeks, notice_period = _normalize_duration_answers(notice_period)
 
 aiClient = None
 about_company_for_ai = None  # TODO extract about company for AI
@@ -243,7 +296,7 @@ def set_search_location() -> None:
             actions.key_down(Keys.CONTROL).send_keys(
                 "a").key_up(Keys.CONTROL).perform()
             actions.send_keys(search_location.strip()).perform()
-            sleep(2)
+            sleep_with_stop(2)
             actions.send_keys(Keys.ENTER).perform()
             try_xp(driver, ".//button[@aria-label='Cancel']")
         except Exception as e:
@@ -258,6 +311,7 @@ def apply_filters() -> None:
     '''
     print_step("Applying LinkedIn filters",
                f"sort={sort_by}, date={date_posted}")
+    ensure_not_stopping("before applying LinkedIn filters")
     set_search_location()
 
     try:
@@ -314,9 +368,12 @@ def apply_filters() -> None:
         show_results_button.click()
 
         global pause_after_filters
+        ensure_not_stopping("after applying LinkedIn filters")
         if pause_after_filters and "Turn off Pause after search" == pyautogui.confirm("These are your configured search results and filter. It is safe to change them while this dialog is open, any changes later could result in errors and skipping this search run.", "Please check your results", ["Turn off Pause after search", "Look's good, Continue"]):
             pause_after_filters = False
 
+    except StopRequested:
+        raise
     except Exception as e:
         print_lg("Setting the preferences failed!")
         pyautogui.confirm(f"Faced error while applying filters. Please make sure correct filters are selected, click on show results and click on any button of this dialog, I know it sucks. Can't turn off Pause after search when error occurs! ERROR: {e}", [
@@ -579,7 +636,7 @@ def get_job_description(
 def upload_resume(modal: WebElement, resume: str) -> tuple[bool, str]:
     try:
         modal.find_element(By.NAME, "file").send_keys(os.path.abspath(resume))
-        return True, os.path.basename(default_resume_path)
+        return True, os.path.basename(resume)
     except:
         return False, "Previous resume"
 
@@ -604,6 +661,7 @@ def answer_questions(modal: WebElement, questions_list: set, work_location: str,
     # all_questions = all_questions + all_list_questions + all_single_line_questions
 
     for Question in all_questions:
+        ensure_not_stopping("while answering Easy Apply questions")
         # Check if it's a select Question
         select = try_xp(Question, ".//select", False)
         if select:
@@ -776,6 +834,7 @@ def answer_questions(modal: WebElement, questions_list: set, work_location: str,
             label_org = label.text if label else "Unknown"
             answer = ""  # years_of_experience
             label = label_org.lower()
+            allow_answer_fallback = True
 
             prev_answer = text.get_attribute("value")
             if not prev_answer or overwrite_previous_answers:
@@ -810,6 +869,7 @@ def answer_questions(modal: WebElement, questions_list: set, work_location: str,
                         answer = notice_period_weeks
                     else:
                         answer = notice_period
+                    allow_answer_fallback = bool(answer)
                 elif 'salary' in label or 'compensation' in label or 'ctc' in label or 'pay' in label:
                     if 'current' in label or 'present' in label:
                         if 'month' in label:
@@ -825,6 +885,7 @@ def answer_questions(modal: WebElement, questions_list: set, work_location: str,
                             answer = desired_salary_lakhs
                         else:
                             answer = desired_salary
+                    allow_answer_fallback = bool(answer)
                 elif 'linkedin' in label:
                     answer = linkedIn
                 elif 'website' in label or 'blog' in label or 'portfolio' in label or 'link' in label:
@@ -843,16 +904,17 @@ def answer_questions(modal: WebElement, questions_list: set, work_location: str,
                     answer = country
                 else:
                     answer = answer_common_questions(label, answer)
-                if answer == "":
+                if answer == "" and allow_answer_fallback:
                     if use_AI and aiClient:
                         try:
-                            if ai_provider.lower() == "openai":
+                            provider = ai_provider.lower()
+                            if provider in ["openai", "groq"]:
                                 answer = ai_answer_question(
                                     aiClient, label_org, question_type="text", job_description=job_description, user_information_all=user_information_all)
-                            elif ai_provider.lower() == "deepseek":
+                            elif provider == "deepseek":
                                 answer = deepseek_answer_question(aiClient, label_org, options=None, question_type="text",
                                                                   job_description=job_description, about_company=None, user_information_all=user_information_all)
-                            elif ai_provider.lower() == "gemini":
+                            elif provider == "gemini":
                                 answer = gemini_answer_question(aiClient, label_org, options=None, question_type="text",
                                                                 job_description=job_description, about_company=None, user_information_all=user_information_all)
                             else:
@@ -875,10 +937,11 @@ def answer_questions(modal: WebElement, questions_list: set, work_location: str,
                         randomly_answered_questions.add((label_org, "text"))
                         answer = years_of_experience
                 # <
-                text.clear()
-                text.send_keys(answer)
-                if do_actions:
-                    sleep(2)
+                if answer != "":
+                    text.clear()
+                    text.send_keys(answer)
+                if do_actions and answer != "":
+                    sleep_with_stop(2)
                     actions.send_keys(Keys.ARROW_DOWN)
                     actions.send_keys(Keys.ENTER).perform()
             questions_list.add(
@@ -901,13 +964,14 @@ def answer_questions(modal: WebElement, questions_list: set, work_location: str,
                 if answer == "":
                     if use_AI and aiClient:
                         try:
-                            if ai_provider.lower() == "openai":
+                            provider = ai_provider.lower()
+                            if provider in ["openai", "groq"]:
                                 answer = ai_answer_question(
                                     aiClient, label_org, question_type="textarea", job_description=job_description, user_information_all=user_information_all)
-                            elif ai_provider.lower() == "deepseek":
+                            elif provider == "deepseek":
                                 answer = deepseek_answer_question(aiClient, label_org, options=None, question_type="textarea",
                                                                   job_description=job_description, about_company=None, user_information_all=user_information_all)
-                            elif ai_provider.lower() == "gemini":
+                            elif provider == "gemini":
                                 answer = gemini_answer_question(aiClient, label_org, options=None, question_type="textarea",
                                                                 job_description=job_description, about_company=None, user_information_all=user_information_all)
                             else:
@@ -932,7 +996,7 @@ def answer_questions(modal: WebElement, questions_list: set, work_location: str,
             text_area.clear()
             text_area.send_keys(answer)
             if do_actions:
-                sleep(2)
+                sleep_with_stop(2)
                 actions.send_keys(Keys.ARROW_DOWN)
                 actions.send_keys(Keys.ENTER).perform()
             questions_list.add(
@@ -973,43 +1037,327 @@ def answer_questions(modal: WebElement, questions_list: set, work_location: str,
     return questions_list
 
 
-def external_apply(pagination_element: WebElement, job_id: str, title: str, company: str, work_location: str, work_style: str, job_link: str, resume: str, date_listed, application_link: str) -> tuple[bool, str, int]:
+def emit_job_event(event_name: str, payload: dict) -> None:
+    try:
+        event_payload = {"event": event_name, **payload}
+        print("EVENT:" + json.dumps(event_payload, ensure_ascii=False))
+    except Exception:
+        pass
+
+
+def emit_job_progress(
+    *,
+    job_id: str,
+    title: str,
+    company: str,
+    work_location: str,
+    work_style: str,
+    job_link: str,
+    application_link: str,
+    application_provider: str,
+    application_stage: str,
+    review_required: bool = False,
+    reason: str | None = None,
+) -> None:
+    emit_job_event(
+        "job_review_required" if review_required else "job_progress",
+        {
+            "job_id": job_id,
+            "title": title,
+            "company": company,
+            "location": work_location,
+            "work_style": work_style,
+            "job_link": job_link,
+            "external_link": application_link,
+            "application_provider": application_provider,
+            "application_stage": application_stage,
+            "review_required": review_required,
+            "reason": reason,
+        },
+    )
+
+
+def _external_submission_detected(provider: str, current_url: str, page_text: str) -> bool:
+    url = (current_url or "").lower()
+    text = (page_text or "").lower()
+    common_markers = (
+        "thank you for applying",
+        "application submitted",
+        "your application has been submitted",
+        "thanks for applying",
+        "we have received your application",
+        "application received",
+    )
+    provider_markers = {
+        "greenhouse": ("applications/thanks", "thank you for applying", "application submitted"),
+        "lever": ("application submitted", "thank you for applying", "thanks for applying"),
+        "ashby": ("application submitted", "thank you", "thanks for applying"),
+    }
+    markers = common_markers + provider_markers.get(provider, ())
+    return any(marker in url or marker in text for marker in markers)
+
+
+def review_external_application(
+    provider: str,
+    driver,
+    application_link: str,
+    unresolved_fields: list[str],
+    title: str,
+    company: str,
+    timeout_seconds: int = 180,
+) -> bool:
+    ensure_not_stopping(f"before reviewing {provider} application")
+    if run_in_background:
+        print_lg(
+            f"{provider.title()} application for {title} | {company} needs manual review, but background mode is enabled."
+        )
+        return False
+
+    review_lines = []
+    if unresolved_fields:
+        review_lines.append("The bot left some fields for manual review:")
+        review_lines.extend(f"- {field}" for field in unresolved_fields[:10])
+        review_lines.append("")
+    review_lines.append("The external application is open in your browser.")
+    review_lines.append("Review the form, submit it manually, then click the first button below.")
+    review_lines.append("Choose skip if you do not want to continue with this application.")
+    decision = pyautogui.confirm(
+        "\n".join(review_lines),
+        f"{provider.title()} review required",
+        ["I will review and submit", "Skip this application"],
+    )
+    if decision != "I will review and submit":
+        print_lg(f"Manual {provider} review skipped for {title} | {company}.")
+        return False
+
+    print_step("Waiting for manual external review", f"{provider} | {title} | {company}")
+    print_lg(
+        f"External application requires manual review. Leaving the browser on {provider.title()} for {title} | {company}."
+    )
+    if unresolved_fields:
+        print_lg("The bot could not confidently complete these fields:")
+        for field in unresolved_fields[:10]:
+            print_lg(f"- {field}")
+    print_lg(
+        f"Complete and submit the application in the browser tab at {application_link}. The bot will keep watching for a submission confirmation for up to {timeout_seconds} seconds."
+    )
+
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        ensure_not_stopping(f"while waiting for manual {provider} review")
+        try:
+            if driver.current_url and _external_submission_detected(provider, driver.current_url, driver.page_source):
+                print_step("External application submitted", f"{provider} | {title} | {company}")
+                return True
+        except NoSuchWindowException:
+            print_lg(f"The external application window for {title} was closed before submission was detected.")
+            return False
+        except Exception as exc:
+            print_lg(f"Waiting for {provider} submission confirmation: {exc}")
+        time.sleep(1)
+
+    print_lg(
+        f"Timed out waiting for manual {provider} submission confirmation for {title} | {company}."
+    )
+    return False
+
+
+def external_apply(
+    pagination_element: WebElement,
+    job_id: str,
+    title: str,
+    company: str,
+    work_location: str,
+    work_style: str,
+    job_link: str,
+    resume: str,
+    date_listed,
+    application_link: str,
+    job_description: str | None = None,
+) -> tuple[ExternalApplyResult, int]:
     '''
-    Function to open new tab and save external job application links
+    Function to open new tab and automate supported external job portals.
     '''
     global tabs_count, dailyEasyApplyLimitReached
     if easy_apply_only:
         try:
             if "exceeded the daily application limit" in driver.find_element(By.CLASS_NAME, "artdeco-inline-feedback__message").text:
                 dailyEasyApplyLimitReached = True
-        except:
+        except Exception:
             pass
-        print_lg(
-            "Skipping job: no Easy Apply button (external/company site only). easy_apply_only is True.")
-        if pagination_element != None:
-            return True, application_link, tabs_count
+        print_lg("Skipping job: no Easy Apply button (external/company site only). easy_apply_only is True.")
+        return ExternalApplyResult(
+            provider="external",
+            application_link=application_link,
+            stage="skipped",
+            skipped=True,
+            reason="Easy Apply only is enabled",
+        ), tabs_count
+
+    starting_window = driver.current_window_handle
+    original_windows = list(driver.window_handles)
+    original_count = len(original_windows)
+
+    def report_progress(stage: str, detail: str | None, review_required: bool, reason: str | None) -> None:
+        ensure_not_stopping(f"during external apply for {title}")
+        if detail:
+            print_step(f"{title} [{detail}]", f"provider={detail}, stage={stage}")
+        else:
+            print_step("External apply progress", f"{title} | stage={stage}")
+        emit_job_progress(
+            job_id=job_id,
+            title=title,
+            company=company,
+            work_location=work_location,
+            work_style=work_style,
+            job_link=job_link,
+            application_link=application_link,
+            application_provider=detail or "external",
+            application_stage=stage,
+            review_required=review_required,
+            reason=reason,
+        )
+
     try:
-        # './/button[contains(span, "Apply") and not(span[contains(@class, "disabled")])]'
-        wait.until(EC.element_to_be_clickable(
-            (By.XPATH, ".//button[contains(@class,'jobs-apply-button') and contains(@class, 'artdeco-button--3')]"))).click()
+        ensure_not_stopping(f"before external apply for {title}")
+        wait.until(
+            EC.element_to_be_clickable(
+                (By.XPATH, ".//button[contains(@class,'jobs-apply-button') and contains(@class, 'artdeco-button--3')]")
+            )
+        ).click()
         wait_span_click(driver, "Continue", 1, True, False)
-        windows = driver.window_handles
-        tabs_count = len(windows)
-        driver.switch_to.window(windows[-1])
+        deadline = time.time() + 10
+        external_handle = starting_window
+        while time.time() < deadline:
+            windows = driver.window_handles
+            if len(windows) > original_count:
+                external_handle = windows[-1]
+                break
+            if driver.current_url != job_link and "linkedin.com" not in driver.current_url.lower():
+                external_handle = driver.current_window_handle
+                break
+            sleep_with_stop(0.25)
+
+        tabs_count = len(driver.window_handles)
+        driver.switch_to.window(external_handle)
+        try:
+            wait.until(lambda d: d.current_url and d.current_url != "about:blank")
+        except TimeoutException:
+            pass
         application_link = driver.current_url
         print_lg('Got the external application link "{}"'.format(application_link))
-        if close_tabs and driver.current_window_handle != linkedIn_tab:
-            driver.close()
-        driver.switch_to.window(linkedIn_tab)
-        return False, application_link, tabs_count
+
+        adapter = detect_adapter(driver)
+        print_step("Provider detected", f"{adapter.provider} | {title} | {company}")
+        emit_job_progress(
+            job_id=job_id,
+            title=title,
+            company=company,
+            work_location=work_location,
+            work_style=work_style,
+            job_link=job_link,
+            application_link=application_link,
+            application_provider=adapter.provider,
+            application_stage="detected",
+            review_required=False,
+            reason=None,
+        )
+
+        if adapter.provider == "unsupported_external":
+            return ExternalApplyResult(
+                provider=adapter.provider,
+                application_link=application_link,
+                stage="unsupported",
+                unsupported=True,
+                reason="Unsupported external application portal",
+            ), tabs_count
+
+        ctx = ExternalApplyContext(
+            driver=driver,
+            wait=wait,
+            actions=actions,
+            ai_client=aiClient,
+            title=title,
+            company=company,
+            job_description=job_description,
+            work_location=work_location,
+            resume_path=os.path.abspath(default_resume_path) if default_resume_path else "",
+            click_gap=click_gap,
+            progress=lambda stage, detail, review_required, reason: emit_job_progress(
+                job_id=job_id,
+                title=title,
+                company=company,
+                work_location=work_location,
+                work_style=work_style,
+                job_link=job_link,
+                application_link=driver.current_url,
+                application_provider=adapter.provider,
+                application_stage=stage,
+                review_required=review_required,
+                reason=reason,
+            ),
+            emit_event=lambda event_name, payload: emit_job_event(event_name, payload),
+        )
+        result = adapter.run(ctx)
+        ensure_not_stopping(f"after filling {adapter.provider} application")
+        result.application_link = driver.current_url
+        print_step(
+            "External apply analysis",
+            f"{adapter.provider} | filled_fields={result.filled_fields} | unresolved={len(result.unresolved_fields)}",
+        )
+
+        if result.review_required:
+            emit_job_progress(
+                job_id=job_id,
+                title=title,
+                company=company,
+                work_location=work_location,
+                work_style=work_style,
+                job_link=job_link,
+                application_link=result.application_link,
+                application_provider=result.provider,
+                application_stage=result.stage,
+                review_required=True,
+                reason=result.reason,
+            )
+            print_step("External review required", f"{result.provider} | {title} | {company}")
+            if review_external_application(
+                result.provider,
+                driver,
+                result.application_link,
+                result.unresolved_fields,
+                title,
+                company,
+            ):
+                result.submitted = True
+                result.review_required = False
+                result.stage = "submitted"
+            else:
+                result.reason = result.reason or "Manual external application review was not completed"
+                result.stage = "failed"
+        return result, tabs_count
+    except StopRequested:
+        raise
     except Exception as e:
-        # print_lg(e)
-        print_lg("Failed to apply!")
-        failed_job(job_id, title, company, work_location, work_style, job_link, resume, date_listed,
-                   "Probably didn't find Apply button or unable to switch tabs.", e, application_link)
-        global failed_count
-        failed_count += 1
-        return True, application_link, tabs_count
+        print_lg("Failed to apply externally!", e)
+        return ExternalApplyResult(
+            provider="external",
+            application_link=application_link,
+            stage="failed",
+            reason="Probably didn't find Apply button or unable to switch tabs.",
+        ), tabs_count
+    finally:
+        try:
+            current_handle = driver.current_window_handle
+            if current_handle != linkedIn_tab:
+                if close_tabs:
+                    driver.close()
+                driver.switch_to.window(linkedIn_tab)
+        except Exception:
+            try:
+                driver.switch_to.window(linkedIn_tab)
+            except Exception:
+                pass
 
 
 def follow_company(modal: WebDriver = driver) -> None:
@@ -1026,7 +1374,22 @@ def follow_company(modal: WebDriver = driver) -> None:
 
 
 # < Failed attempts logging
-def failed_job(job_id: str, title: str, company: str, work_location: str, work_style: str, job_link: str, resume: str, date_listed, error: str, exception: Exception, application_link: str) -> None:
+def failed_job(
+    job_id: str,
+    title: str,
+    company: str,
+    work_location: str,
+    work_style: str,
+    job_link: str,
+    resume: str,
+    date_listed,
+    error: str,
+    exception: Exception,
+    application_link: str,
+    application_provider: str | None = None,
+    application_stage: str | None = None,
+    review_required: bool = False,
+) -> None:
     '''
     Function to update failed jobs list in excel
     '''
@@ -1046,7 +1409,6 @@ def failed_job(job_id: str, title: str, company: str, work_location: str, work_s
     finally:
         try:
             payload = {
-                "event": "job_failed",
                 "job_id": job_id,
                 "title": title,
                 "company": company,
@@ -1057,8 +1419,11 @@ def failed_job(job_id: str, title: str, company: str, work_location: str, work_s
                 "date_listed": str(date_listed),
                 "reason": error,
                 "external_link": application_link,
+                "application_provider": application_provider or ("linkedin_easy_apply" if application_link in {"Easy Applied", "Skipped"} else "external"),
+                "application_stage": application_stage or "failed",
+                "review_required": review_required,
             }
-            print("EVENT:" + json.dumps(payload, ensure_ascii=False))
+            emit_job_event("job_failed", payload)
         except Exception:
             pass
 # >
@@ -1067,7 +1432,8 @@ def failed_job(job_id: str, title: str, company: str, work_location: str, work_s
 def submitted_jobs(job_id: str, title: str, company: str, work_location: str, work_style: str, description: str, experience_required: int | Literal['Unknown', 'Error in extraction'],
                    skills: list[str] | Literal['In Development'], hr_name: str | Literal['Unknown'], hr_link: str | Literal['Unknown'], resume: str,
                    reposted: bool, date_listed: datetime | Literal['Unknown'], date_applied:  datetime | Literal['Pending'], job_link: str, application_link: str,
-                   questions_list: set | None, connect_request: Literal['In Development']) -> None:
+                   questions_list: set | None, connect_request: Literal['In Development'],
+                   application_provider: str | None = None, application_stage: str | None = None, review_required: bool = False) -> None:
     '''
     Function to create or update the Applied jobs CSV file, once the application is submitted successfully
     '''
@@ -1091,7 +1457,6 @@ def submitted_jobs(job_id: str, title: str, company: str, work_location: str, wo
     finally:
         try:
             payload = {
-                "event": "job_applied",
                 "job_id": job_id,
                 "title": title,
                 "company": company,
@@ -1101,8 +1466,11 @@ def submitted_jobs(job_id: str, title: str, company: str, work_location: str, wo
                 "date_applied": str(date_applied),
                 "application_link": application_link,
                 "job_link": job_link,
+                "application_provider": application_provider or ("linkedin_easy_apply" if application_link == "Easy Applied" else "external"),
+                "application_stage": application_stage or "submitted",
+                "review_required": review_required,
             }
-            print("EVENT:" + json.dumps(payload, ensure_ascii=False))
+            emit_job_event("job_applied", payload)
         except Exception:
             pass
 
@@ -1124,9 +1492,7 @@ def apply_to_jobs(search_terms: list[str]) -> None:
     if randomize_search_order:
         shuffle(search_terms)
     for searchTerm in search_terms:
-        if should_stop():
-            print_lg("Stop requested. Exiting before new search term.")
-            return
+        ensure_not_stopping("before starting a new search term")
         print_step("Opening job search", searchTerm)
         driver.get(
             f"https://www.linkedin.com/jobs/search/?keywords={searchTerm}")
@@ -1138,9 +1504,7 @@ def apply_to_jobs(search_terms: list[str]) -> None:
         current_count = 0
         try:
             while current_count < switch_number:
-                if should_stop():
-                    print_lg("Stop requested. Exiting run loop.")
-                    return
+                ensure_not_stopping("during the LinkedIn search loop")
                 # Wait until job listings are loaded
                 wait.until(EC.presence_of_all_elements_located(
                     (By.XPATH, "//li[@data-occludable-job-id]")))
@@ -1153,9 +1517,7 @@ def apply_to_jobs(search_terms: list[str]) -> None:
                     By.XPATH, "//li[@data-occludable-job-id]")
 
                 for job in job_listings:
-                    if should_stop():
-                        print_lg("Stop requested. Exiting job loop.")
-                        return
+                    ensure_not_stopping("while processing LinkedIn job cards")
                     if keep_screen_awake:
                         pyautogui.press('shiftright')
                     if current_count >= switch_number:
@@ -1181,6 +1543,9 @@ def apply_to_jobs(search_terms: list[str]) -> None:
 
                     job_link = "https://www.linkedin.com/jobs/view/"+job_id
                     application_link = "Easy Applied"
+                    application_provider = "linkedin_easy_apply"
+                    application_stage = "submitted"
+                    review_required = False
                     date_applied = "Pending"
                     hr_link = "Unknown"
                     hr_name = "Unknown"
@@ -1190,6 +1555,7 @@ def apply_to_jobs(search_terms: list[str]) -> None:
                     resume = "Pending"
                     reposted = False
                     questions_list = None
+                    external_result: ExternalApplyResult | None = None
                     try:
                         rejected_jobs, blacklisted_companies, jobs_top_card = check_blacklist(
                             rejected_jobs, job_id, company, blacklisted_companies)
@@ -1261,13 +1627,14 @@ def apply_to_jobs(search_terms: list[str]) -> None:
 
                     if use_AI and description != "Unknown":
                         try:
-                            if ai_provider.lower() == "openai":
+                            provider = ai_provider.lower()
+                            if provider in ["openai", "groq"]:
                                 skills = ai_extract_skills(
                                     aiClient, description)
-                            elif ai_provider.lower() == "deepseek":
+                            elif provider == "deepseek":
                                 skills = deepseek_extract_skills(
                                     aiClient, description)
-                            elif ai_provider.lower() == "gemini":
+                            elif provider == "gemini":
                                 skills = gemini_extract_skills(
                                     aiClient, description)
                             else:
@@ -1313,6 +1680,7 @@ def apply_to_jobs(search_terms: list[str]) -> None:
                                 questions_list = set()
                                 next_counter = 0
                                 while next_button:
+                                    ensure_not_stopping(f"during Easy Apply for {title}")
                                     next_counter += 1
                                     if next_counter >= 15:
                                         if pause_at_failed_question:
@@ -1353,6 +1721,7 @@ def apply_to_jobs(search_terms: list[str]) -> None:
                                         "Answered the following questions...", questions_list)
                                     print("\n\n" + "\n".join(str(question)
                                           for question in questions_list) + "\n\n")
+                                ensure_not_stopping(f"before reviewing Easy Apply for {title}")
                                 wait_span_click(
                                     driver, "Review", 1, scrollTop=True)
                                 cur_pause_before_submit = pause_before_submit
@@ -1382,13 +1751,20 @@ def apply_to_jobs(search_terms: list[str]) -> None:
                                         raise Exception(
                                             "Failed to click Submit application 😑")
 
+                        except StopRequested:
+                            try:
+                                discard_job()
+                            except Exception:
+                                pass
+                            raise
                         except Exception as e:
                             print_lg("Failed to Easy apply!")
                             # print_lg(e)
                             critical_error_log(
                                 "Somewhere in Easy Apply process", e)
                             failed_job(job_id, title, company, work_location, work_style, job_link,
-                                       resume, date_listed, "Problem in Easy Applying", e, application_link)
+                                       resume, date_listed, "Problem in Easy Applying", e, application_link,
+                                       application_provider="linkedin_easy_apply", application_stage="failed")
                             failed_count += 1
                             discard_job()
                             continue
@@ -1396,18 +1772,60 @@ def apply_to_jobs(search_terms: list[str]) -> None:
                         # Case 2: Apply externally
                         print_step("Opening external application",
                                    f"{title} | {company}")
-                        skip, application_link, tabs_count = external_apply(
-                            pagination_element, job_id, title, company, work_location, work_style, job_link, resume, date_listed, application_link)
+                        external_result, tabs_count = external_apply(
+                            pagination_element,
+                            job_id,
+                            title,
+                            company,
+                            work_location,
+                            work_style,
+                            job_link,
+                            resume,
+                            date_listed,
+                            application_link,
+                            job_description=description,
+                        )
                         if dailyEasyApplyLimitReached:
                             print_lg(
                                 "\n###############  Daily application limit for Easy Apply is reached!  ###############\n")
                             return
-                        if skip:
+                        if external_result.skipped:
                             continue
+                        application_link = external_result.application_link
+                        application_provider = external_result.provider
+                        application_stage = external_result.stage
+                        review_required = external_result.review_required
+                        resume = external_result.resume_label or resume
+                        if not external_result.submitted:
+                            failed_job(
+                                job_id,
+                                title,
+                                company,
+                                work_location,
+                                work_style,
+                                job_link,
+                                resume,
+                                date_listed,
+                                external_result.reason or "External application was not submitted",
+                                Exception(external_result.reason or "External application was not submitted"),
+                                application_link,
+                                application_provider=application_provider,
+                                application_stage=application_stage,
+                                review_required=review_required,
+                            )
+                            if external_result.unsupported:
+                                skip_count += 1
+                            else:
+                                failed_count += 1
+                            continue
+                        date_applied = datetime.now()
 
                     submitted_jobs(job_id, title, company, work_location, work_style, description, experience_required, skills, hr_name,
-                                   hr_link, resume, reposted, date_listed, date_applied, job_link, application_link, questions_list, connect_request)
+                                   hr_link, resume, reposted, date_listed, date_applied, job_link, application_link, questions_list, connect_request,
+                                   application_provider=application_provider, application_stage=application_stage, review_required=review_required)
                     if uploaded:
+                        useNewResume = False
+                    if external_result and external_result.resume_label != "Previous resume":
                         useNewResume = False
 
                     print_lg(
@@ -1433,6 +1851,8 @@ def apply_to_jobs(search_terms: list[str]) -> None:
                         f"\n>-> Didn't find Page {current_page+1}. Probably at the end page of results!\n")
                     break
 
+        except StopRequested:
+            raise
         except (NoSuchWindowException, WebDriverException) as e:
             print_lg(
                 "Browser window closed or session is invalid. Ending application process.", e)
@@ -1451,6 +1871,7 @@ def apply_to_jobs(search_terms: list[str]) -> None:
 def run(total_runs: int) -> int:
     if dailyEasyApplyLimitReached:
         return total_runs
+    ensure_not_stopping("before starting a run cycle")
     print_step("Starting run cycle", str(total_runs))
     print_lg("\n########################################################################################################################\n")
     print_lg(f"Date and Time: {datetime.now()}")
@@ -1461,9 +1882,9 @@ def run(total_runs: int) -> int:
     print_lg("########################################################################################################################\n")
     if not dailyEasyApplyLimitReached:
         print_lg("Sleeping for 10 min...")
-        sleep(300)
+        sleep_with_stop(300)
         print_lg("Few more min... Gonna start with in next 5 min...")
-        sleep(300)
+        sleep_with_stop(300)
     buffer(3)
     return total_runs + 1
 
@@ -1475,14 +1896,21 @@ linkedIn_tab = False
 def main() -> None:
     total_runs = 1
     try:
-        global linkedIn_tab, tabs_count, useNewResume, aiClient
+        global linkedIn_tab, tabs_count, useNewResume, aiClient, date_posted, sort_by
         alert_title = "Error Occurred. Closing Browser!"
         print_step("Booting bot")
         validate_config()
         print_step("Configuration validated")
+        print_step(
+            "Runtime config loaded",
+            f"path={BOT_CONFIG_PATH}, search_terms={search_terms}, search_location={search_location}, date={date_posted}, sort={sort_by}",
+        )
 
-        if not os.path.exists(default_resume_path):
-            pyautogui.alert(text='Your default resume "{}" is missing! Please update it\'s folder path "default_resume_path" in config.py\n\nOR\n\nAdd a resume with exact name and path (check for spelling mistakes including cases).\n\n\nFor now the bot will continue using your previous upload from LinkedIn!'.format(
+        if not default_resume_path:
+            print_lg("No default resume is selected for this run. The bot will keep using the previously uploaded LinkedIn resume.")
+            useNewResume = False
+        elif not os.path.exists(default_resume_path):
+            pyautogui.alert(text='Your selected resume "{}" is missing on disk.\n\nFor now the bot will continue using your previous upload from LinkedIn!'.format(
                 default_resume_path), title="Missing Resume", button="OK")
             useNewResume = False
 
@@ -1508,7 +1936,8 @@ def main() -> None:
         #         print_lg("Opening OpenAI chatGPT tab failed!")
         if use_AI:
             print_step("Initializing AI client", ai_provider)
-            if ai_provider == "openai":
+            # Note: Groq exposes an OpenAI-compatible API, so we reuse the OpenAI client
+            if ai_provider in ["openai", "groq"]:
                 aiClient = ai_create_openai_client()
             # Create DeepSeek client
             elif ai_provider == "deepseek":
@@ -1532,11 +1961,9 @@ def main() -> None:
             if cycle_date_posted:
                 date_options = ["Any time", "Past month",
                                 "Past week", "Past 24 hours"]
-                global date_posted
                 date_posted = date_options[date_options.index(date_posted)+1 if date_options.index(date_posted)+1 > len(
                     date_options) else -1] if stop_date_cycle_at_24hr else date_options[0 if date_options.index(date_posted)+1 >= len(date_options) else date_options.index(date_posted)+1]
             if alternate_sortby:
-                global sort_by
                 sort_by = "Most recent" if sort_by == "Most relevant" else "Most relevant"
                 total_runs = run(total_runs)
                 sort_by = "Most recent" if sort_by == "Most relevant" else "Most relevant"
@@ -1546,6 +1973,8 @@ def main() -> None:
 
     except (NoSuchWindowException, WebDriverException) as e:
         print_lg("Browser window closed or session is invalid. Exiting.", e)
+    except StopRequested:
+        print_lg("Stop requested. Shutting down the bot gracefully.")
     except Exception as e:
         critical_error_log("In Applier Main", e)
         pyautogui.alert(e, alert_title)
@@ -1565,20 +1994,22 @@ def main() -> None:
             print_lg("\n\nQuestions randomly answered:\n  {}  \n\n".format(
                 ";\n".join(str(question) for question in randomly_answered_questions)))
         msg = f"Summary:\n{summary}"
-        pyautogui.alert(msg, "Exiting..")
+        if not should_stop():
+            pyautogui.alert(msg, "Exiting..")
         print_lg(msg, "Closing the browser...")
         if tabs_count >= 10:
             msg = "NOTE: IF YOU HAVE MORE THAN 10 TABS OPENED, PLEASE CLOSE OR BOOKMARK THEM!\n\nOr it's highly likely that application will just open browser and not do anything next time!"
-            pyautogui.alert(msg, "Info")
+            if not should_stop():
+                pyautogui.alert(msg, "Info")
             print_lg("\n"+msg)
         if use_AI and aiClient:
             try:
-                if ai_provider.lower() == "openai":
+                provider = ai_provider.lower()
+                if provider in ["openai", "groq", "deepseek"]:
                     ai_close_openai_client(aiClient)
-                elif ai_provider.lower() == "deepseek":
-                    ai_close_openai_client(aiClient)
-                elif ai_provider.lower() == "gemini":
-                    pass  # Gemini client does not need to be closed
+                elif provider == "gemini":
+                    # Gemini client does not need to be closed explicitly
+                    pass
                 print_lg(f"Closed {ai_provider} AI client.")
             except Exception as e:
                 print_lg("Failed to close AI client:", e)

@@ -4,10 +4,9 @@ from config.personals import ethnicity, gender, disability_status, veteran_statu
 from config.questions import *
 from config.search import security_clearance, did_masters
 
-from modules.helpers import print_lg, critical_error_log, convert_to_json
+from modules.helpers import print_lg, critical_error_log, convert_to_json, show_confirm
 from modules.ai.prompts import *
 
-from pyautogui import confirm
 from openai import OpenAI
 from openai.types.model import Model
 from openai.types.chat import ChatCompletion, ChatCompletionChunk
@@ -34,7 +33,7 @@ def ai_error_alert(message: str, stackTrace: str, title: str = "AI Connection Er
     """
     global showAiErrorAlerts
     if showAiErrorAlerts:
-        if "Pause AI error alerts" == confirm(f"{message}{stackTrace}\n", title, ["Pause AI error alerts", "Okay Continue"]):
+        if "Pause AI error alerts" == show_confirm(f"{message}{stackTrace}\n", title, ["Pause AI error alerts", "Okay Continue"]):
             showAiErrorAlerts = False
     critical_error_log(message, stackTrace)
 
@@ -133,7 +132,23 @@ def model_supports_temperature(model_name: str) -> bool:
     Returns:
         bool: True if the model supports temperature adjustments, otherwise False.
     """
+    # Treat Groq's OpenAI-compatible models as temperature-capable as well.
+    groq_prefixes = ("llama-3", "llama-3.1", "llama-3.2", "llama-3.3")
+    if any(model_name.startswith(prefix) for prefix in groq_prefixes):
+        return True
     return model_name in ["gpt-3.5-turbo", "gpt-4", "gpt-4-turbo", "gpt-4o", "gpt-4o-mini"]
+
+
+def extract_skills_response_format_for_provider() -> dict:
+    """
+    Groq's OpenAI-compatible API works reliably with JSON Object mode for the
+    Llama 3.x family. OpenAI-style providers can continue using the stricter
+    json_schema response format.
+    """
+    provider = str(ai_provider).lower()
+    if provider == "groq":
+        return {"type": "json_object"}
+    return extract_skills_response_format
 
 # Function to get chat completion from OpenAI API
 
@@ -197,7 +212,8 @@ def ai_extract_skills(client: OpenAI, job_description: str, stream: bool = strea
         prompt = extract_skills_prompt.format(job_description)
 
         messages = [{"role": "user", "content": prompt}]
-        return ai_completion(client, messages, response_format=extract_skills_response_format, stream=stream)
+        response_format = extract_skills_response_format_for_provider()
+        return ai_completion(client, messages, response_format=response_format, stream=stream)
     except Exception as e:
         ai_error_alert(
             f"Error occurred while extracting skills from job description. {apiCheckInstructions}", e)
@@ -230,6 +246,12 @@ def ai_answer_question(
     try:
         prompt = ai_answer_prompt.format(
             user_information_all or "N/A", question)
+        if options and question_type in ["single_select", "multiple_select"]:
+            prompt += "\n\nOPTIONS:\n" + "\n".join([f"- {option}" for option in options])
+            if question_type == "single_select":
+                prompt += "\n\nChoose exactly one option from the list above and respond with only that option."
+            else:
+                prompt += "\n\nChoose the best matching option or options from the list above."
         # Append optional details if provided
         if job_description and job_description != "Unknown":
             prompt += f"\nJob Description:\n{job_description}"
@@ -278,15 +300,6 @@ def ai_generate_coverletter(
 
 
 # < Evaluation Agents
-def ai_evaluate_resume(
-    client: OpenAI,
-    job_description: str, about_company: str, required_skills: dict,
-    resume: str,
-    stream: bool = stream_output
-) -> dict | ValueError:
-    pass
-
-
 def ai_evaluate_resume(
     client: OpenAI,
     job_description: str, about_company: str, required_skills: dict,

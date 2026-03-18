@@ -19,6 +19,7 @@ class ConfigPayload(BaseModel):
     search: Optional[Any] = None
     settings: Optional[Any] = None
     resume: Optional[Any] = None
+    other: Optional[Any] = None
 
 
 class ConfigOut(ConfigPayload):
@@ -55,6 +56,9 @@ class JobApplicationOut(BaseModel):
     date_posted: Optional[datetime] = None
     date_applied: Optional[datetime] = None
     application_type: Optional[str] = None
+    application_provider: Optional[str] = None
+    application_stage: Optional[str] = None
+    review_required: bool = False
     status: str
     pipeline_status: str
     reason_skipped: Optional[str] = None

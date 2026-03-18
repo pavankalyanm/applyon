@@ -17,6 +17,12 @@ def check_int(var: int, var_name: str, min_value: int = 0) -> bool | TypeError |
     return True
 
 
+def check_optional_int(var: int | None, var_name: str, min_value: int = 0) -> bool | TypeError | ValueError:
+    if var is None:
+        return True
+    return check_int(var, var_name, min_value)
+
+
 def check_boolean(var: bool, var_name: str) -> bool | ValueError:
     if var == True or var == False:
         return True
@@ -71,12 +77,12 @@ def validate_personals() -> None | ValueError | TypeError:
     check_string(zipcode, "zipcode")
     check_string(country, "country")
 
-    check_string(ethnicity, "ethnicity", ["Decline", "Hispanic/Latino", "American Indian or Alaska Native", "Asian",
+    check_string(ethnicity, "ethnicity", ["", "Decline", "Hispanic/Latino", "American Indian or Alaska Native", "Asian",
                  "Black or African American", "Native Hawaiian or Other Pacific Islander", "White", "Other"],  min_length=0)
     check_string(gender, "gender", ["Male", "Female", "Other", "Decline", ""])
     check_string(disability_status, "disability_status",
-                 ["Yes", "No", "Decline"])
-    check_string(veteran_status, "veteran_status", ["Yes", "No", "Decline"])
+                 ["", "Yes", "No", "Decline"])
+    check_string(veteran_status, "veteran_status", ["", "Yes", "No", "Decline"])
 
 
 def validate_questions() -> None | ValueError | TypeError:
@@ -88,15 +94,15 @@ def validate_questions() -> None | ValueError | TypeError:
 
     check_string(default_resume_path, "default_resume_path")
     check_string(years_of_experience, "years_of_experience")
-    check_string(require_visa, "require_visa", ["Yes", "No"])
+    check_string(require_visa, "require_visa", ["", "Yes", "No"])
     check_string(website, "website")
     check_string(linkedIn, "linkedIn")
-    check_int(desired_salary, "desired_salary")
-    check_string(us_citizenship, "us_citizenship", ["U.S. Citizen/Permanent Resident", "Non-citizen allowed to work for any employer",
+    check_optional_int(desired_salary, "desired_salary")
+    check_string(us_citizenship, "us_citizenship", ["", "U.S. Citizen/Permanent Resident", "Non-citizen allowed to work for any employer",
                  "Non-citizen allowed to work for current employer", "Non-citizen seeking work authorization", "Canadian Citizen/Permanent Resident", "Other"])
     check_string(linkedin_headline, "linkedin_headline")
-    check_int(notice_period, "notice_period")
-    check_int(current_ctc, "current_ctc")
+    check_optional_int(notice_period, "notice_period")
+    check_optional_int(current_ctc, "current_ctc")
     check_string(linkedin_summary, "linkedin_summary")
     check_string(cover_letter, "cover_letter")
     check_string(recent_employer, "recent_employer")
@@ -170,13 +176,14 @@ def validate_secrets() -> None | ValueError | TypeError:
     # check_string(llm_embedding_model, "llm_embedding_model")
     check_boolean(stream_output, "stream_output")
 
-    # Validate DeepSeek configuration
-    check_string(ai_provider, "ai_provider", ["openai", "deepseek"])
+    # Validate AI provider configuration (OpenAI-compatible, DeepSeek, Gemini, Groq)
+    check_string(ai_provider, "ai_provider", ["openai", "deepseek", "gemini", "groq"])
 
     if ai_provider == "deepseek":
         check_string(llm_model, "deepseek_model", [
                      "deepseek-chat", "deepseek-reasoner"])
     else:
+        # For openai, gemini, and groq we just ensure a non-empty model name
         check_string(llm_model, "llm_model")
 
 

@@ -16,6 +16,7 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  TablePagination,
   TextField,
   ToggleButton,
   ToggleButtonGroup,
@@ -37,6 +38,13 @@ import { api } from '../api'
 type PipelineStatus = 'applied' | 'assessment' | 'interview' | 'rejected'
 type BotStatus = 'applied' | 'failed'
 type ViewMode = 'table' | 'board'
+type ApplicationProvider =
+  | 'linkedin_easy_apply'
+  | 'greenhouse'
+  | 'lever'
+  | 'ashby'
+  | 'unsupported_external'
+  | 'external'
 
 type JobApplication = {
   id: number
@@ -46,6 +54,9 @@ type JobApplication = {
   company?: string | null
   location?: string | null
   application_type?: string | null
+  application_provider?: ApplicationProvider | null
+  application_stage?: string | null
+  review_required?: boolean
   status: BotStatus
   pipeline_status: PipelineStatus
   reason_skipped?: string | null
@@ -55,6 +66,15 @@ type JobApplication = {
 }
 
 const pipelineStatuses: PipelineStatus[] = ['applied', 'assessment', 'interview', 'rejected']
+const providerOptions: { value: string; label: string }[] = [
+  { value: 'all', label: 'All providers' },
+  { value: 'linkedin_easy_apply', label: 'LinkedIn Easy Apply' },
+  { value: 'greenhouse', label: 'Greenhouse' },
+  { value: 'lever', label: 'Lever' },
+  { value: 'ashby', label: 'Ashby' },
+  { value: 'unsupported_external', label: 'Unsupported external' },
+  { value: 'external', label: 'Other external' },
+]
 
 const pipelineLabels: Record<PipelineStatus, string> = {
   applied: 'Applied',
@@ -73,9 +93,12 @@ const pipelineColors: Record<PipelineStatus, 'primary' | 'warning' | 'success' |
 export function JobsDashboard() {
   const navigate = useNavigate()
   const [jobs, setJobs] = useState<JobApplication[]>([])
+  const [page, setPage] = useState(0)
+  const rowsPerPage = 25
   const [search, setSearch] = useState('')
   const [pipelineFilter, setPipelineFilter] = useState('all')
   const [botStatusFilter, setBotStatusFilter] = useState('all')
+  const [providerFilter, setProviderFilter] = useState('all')
   const [view, setView] = useState<ViewMode>('table')
   const [loading, setLoading] = useState(false)
 
@@ -87,10 +110,12 @@ export function JobsDashboard() {
           search: search.trim() || undefined,
           pipeline_status: pipelineFilter === 'all' ? undefined : pipelineFilter,
           status: botStatusFilter === 'all' ? undefined : botStatusFilter,
+          provider: providerFilter === 'all' ? undefined : providerFilter,
           limit: 500,
         },
       })
       setJobs(resp.data.items)
+      setPage(0)
     } finally {
       setLoading(false)
     }
@@ -105,7 +130,26 @@ export function JobsDashboard() {
 
   useEffect(() => {
     loadJobs()
-  }, [search, pipelineFilter, botStatusFilter])
+  }, [search, pipelineFilter, botStatusFilter, providerFilter])
+
+  function providerLabel(provider?: string | null) {
+    switch (provider) {
+      case 'linkedin_easy_apply':
+        return 'LinkedIn Easy Apply'
+      case 'greenhouse':
+        return 'Greenhouse'
+      case 'lever':
+        return 'Lever'
+      case 'ashby':
+        return 'Ashby'
+      case 'unsupported_external':
+        return 'Unsupported external'
+      case 'external':
+        return 'External'
+      default:
+        return 'Unknown provider'
+    }
+  }
 
   const counts = pipelineStatuses.reduce<Record<PipelineStatus, number>>(
     (acc, status) => {
@@ -198,6 +242,21 @@ export function JobsDashboard() {
                 <MenuItem value="failed">Failed</MenuItem>
               </Select>
             </FormControl>
+            <FormControl sx={{ minWidth: 210 }}>
+              <InputLabel id="provider-filter-label">Provider</InputLabel>
+              <Select
+                labelId="provider-filter-label"
+                value={providerFilter}
+                label="Provider"
+                onChange={(event) => setProviderFilter(event.target.value)}
+              >
+                {providerOptions.map((option) => (
+                  <MenuItem key={option.value} value={option.value}>
+                    {option.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
             <ToggleButtonGroup
               exclusive
               value={view}
@@ -245,6 +304,7 @@ export function JobsDashboard() {
                 <TableHead>
                   <TableRow>
                     <TableCell>Job</TableCell>
+                    <TableCell>Provider</TableCell>
                     <TableCell>Status</TableCell>
                     <TableCell>Run Result</TableCell>
                     <TableCell>Run</TableCell>
@@ -253,7 +313,9 @@ export function JobsDashboard() {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {jobs.map((job) => (
+                  {jobs
+                    .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                    .map((job) => (
                     <TableRow key={job.id} hover>
                       <TableCell sx={{ minWidth: 280 }}>
                         <Typography sx={{ fontWeight: 700, color: '#0f172a' }}>
@@ -270,6 +332,20 @@ export function JobsDashboard() {
                             {job.reason_skipped}
                           </Typography>
                         )}
+                      </TableCell>
+                      <TableCell sx={{ minWidth: 180 }}>
+                        <Stack spacing={1}>
+                          <Chip label={providerLabel(job.application_provider)} size="small" variant="outlined" />
+                          <Chip
+                            label={job.application_stage || 'submitted'}
+                            size="small"
+                            color={job.application_stage === 'review_pending' ? 'warning' : 'default'}
+                            sx={{ textTransform: 'capitalize' }}
+                          />
+                          {job.review_required && (
+                            <Chip label="Review required" size="small" color="warning" variant="filled" />
+                          )}
+                        </Stack>
                       </TableCell>
                       <TableCell>
                         <FormControl size="small" sx={{ minWidth: 160 }}>
@@ -327,7 +403,7 @@ export function JobsDashboard() {
                   ))}
                   {jobs.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={6}>
+                      <TableCell colSpan={7}>
                         <Typography sx={{ py: 4, textAlign: 'center', color: '#64748b' }}>
                           No jobs matched the current filters.
                         </Typography>
@@ -336,6 +412,14 @@ export function JobsDashboard() {
                   )}
                 </TableBody>
               </Table>
+              <TablePagination
+                component="div"
+                count={jobs.length}
+                page={page}
+                onPageChange={(_, newPage) => setPage(newPage)}
+                rowsPerPage={rowsPerPage}
+                rowsPerPageOptions={[rowsPerPage]}
+              />
             </TableContainer>
           ) : (
             <Box
@@ -397,6 +481,13 @@ export function JobsDashboard() {
                             </Select>
                           </FormControl>
                           <Stack direction="row" spacing={1} sx={{ mb: 1.5, flexWrap: 'wrap' }}>
+                            <Chip label={providerLabel(job.application_provider)} size="small" variant="outlined" />
+                            <Chip
+                              label={job.application_stage || 'submitted'}
+                              size="small"
+                              color={job.application_stage === 'review_pending' ? 'warning' : 'default'}
+                              sx={{ textTransform: 'capitalize' }}
+                            />
                             <Chip
                               label={job.status}
                               color={job.status === 'applied' ? 'success' : 'error'}
@@ -405,6 +496,7 @@ export function JobsDashboard() {
                               sx={{ textTransform: 'capitalize' }}
                             />
                             <Chip label={`Run #${job.run_id}`} size="small" variant="outlined" />
+                            {job.review_required && <Chip label="Review required" size="small" color="warning" />}
                           </Stack>
                           <Stack direction="row" spacing={1}>
                             {job.job_link && (

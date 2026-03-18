@@ -31,13 +31,6 @@ export function QuestionsStep({ value, onChange }: Props) {
       <Typography color="text.secondary" fontSize="0.95rem">
         These fields map directly to <code>bot/config/questions.py</code>.
       </Typography>
-      <TextField
-        label="Default resume path"
-        helperText="Relative path to your default resume PDF"
-        value={value.default_resume_path}
-        onChange={(e) => update('default_resume_path', e.target.value)}
-        fullWidth
-      />
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
         <TextField
           label="Years of experience (generic answer)"
@@ -194,4 +187,3 @@ export function QuestionsStep({ value, onChange }: Props) {
     </Stack>
   )
 }
-
