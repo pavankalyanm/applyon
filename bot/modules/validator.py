@@ -5,6 +5,7 @@ from config.secrets import *
 from config.search import *
 from config.questions import *
 from config.personals import *
+from config.outreach import *
 __validation_file_path = ""
 
 
@@ -220,15 +221,34 @@ def validate_settings() -> None | ValueError | TypeError:
     check_boolean(stealth_mode, "stealth_mode")
 
 
+def validate_outreach() -> None | ValueError | TypeError:
+    global __validation_file_path
+    __validation_file_path = "config/outreach.py"
+
+    check_string(default_role, "default_role")
+    check_string(default_company, "default_company")
+    check_string(default_recruiter_search_context, "default_recruiter_search_context")
+    check_string(default_message_content, "default_message_content")
+    check_boolean(use_ai_for_outreach, "use_ai_for_outreach")
+    check_boolean(attach_default_resume, "attach_default_resume")
+    check_optional_int(max_outreaches_per_run, "max_outreaches_per_run", 1)
+    check_optional_int(max_outreaches_per_day, "max_outreaches_per_day", 1)
+    check_boolean(require_review_before_send, "require_review_before_send")
+    check_boolean(collect_recruiter_email_if_available, "collect_recruiter_email_if_available")
+    check_string(run_type, "run_type", ["apply", "outreach"])
+
+
 def validate_config() -> bool | ValueError | TypeError:
     '''
     Runs all validation functions to validate all variables in the config files.
     '''
     validate_personals()
     validate_questions()
-    validate_search()
+    if run_type != "outreach":
+        validate_search()
     validate_secrets()
     validate_settings()
+    validate_outreach()
 
     # validate_String(chatGPT_username, "chatGPT_username")
     # validate_String(chatGPT_password, "chatGPT_password")

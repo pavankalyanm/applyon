@@ -12,6 +12,7 @@ from .routes_config import router as config_router
 from .routes_runs import router as runs_router
 from .routes_jobs import router as jobs_router
 from .routes_resumes import router as resumes_router
+from .routes_outreaches import router as outreaches_router
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -55,3 +56,4 @@ app.include_router(config_router)
 app.include_router(runs_router)
 app.include_router(jobs_router)
 app.include_router(resumes_router)
+app.include_router(outreaches_router)

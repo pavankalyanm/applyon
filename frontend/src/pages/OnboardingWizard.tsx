@@ -3,10 +3,11 @@ import { ArrowBack, ArrowForward, CheckCircle, RocketLaunch } from '@mui/icons-m
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
-import type { ConfigResponse, PersonalsConfig, QuestionsConfig, ResumeConfig, SearchConfig, SettingsConfig, SecretsConfig } from './onboarding/types'
+import type { ConfigResponse, OutreachConfig, PersonalsConfig, QuestionsConfig, ResumeConfig, SearchConfig, SettingsConfig, SecretsConfig } from './onboarding/types'
 import {
   defaultPersonals,
   defaultQuestions,
+  defaultOutreach,
   defaultResume,
   defaultSearch,
   defaultSettings,
@@ -17,9 +18,10 @@ import { SearchStep } from './onboarding/SearchStep'
 import { QuestionsStep } from './onboarding/QuestionsStep'
 import { SettingsStep } from './onboarding/SettingsStep'
 import { ResumeStep } from './onboarding/ResumeStep'
+import { OutreachStep } from './onboarding/OutreachStep'
 import { SecretsStep } from './onboarding/SecretsStep'
 
-const steps = ['Personals', 'Search', 'Questions', 'Settings', 'Resume', 'Secrets']
+const steps = ['Personals', 'Search', 'Questions', 'Settings', 'Resume', 'Outreach', 'Secrets']
 
 export function OnboardingWizard() {
   const navigate = useNavigate()
@@ -32,6 +34,7 @@ export function OnboardingWizard() {
   const [search, setSearch] = useState<SearchConfig>(defaultSearch)
   const [settings, setSettings] = useState<SettingsConfig>(defaultSettings)
   const [resume, setResume] = useState<ResumeConfig>(defaultResume)
+  const [outreach, setOutreach] = useState<OutreachConfig>(defaultOutreach)
   const [secrets, setSecrets] = useState<SecretsConfig>(defaultSecrets)
 
   useEffect(() => {
@@ -79,6 +82,9 @@ export function OnboardingWizard() {
         if (data.resume) {
           setResume({ ...defaultResume, ...data.resume })
         }
+        if (data.outreach) {
+          setOutreach({ ...defaultOutreach, ...data.outreach })
+        }
       } finally {
         setLoading(false)
       }
@@ -105,6 +111,7 @@ export function OnboardingWizard() {
         questions: questionPayload,
         search,
         settings: { ...settings, secrets },
+        outreach,
       })
     } finally {
       setSaving(false)
@@ -182,7 +189,8 @@ export function OnboardingWizard() {
             {activeStep === 2 && <QuestionsStep value={questions} onChange={setQuestions} />}
             {activeStep === 3 && <SettingsStep value={settings} onChange={setSettings} />}
             {activeStep === 4 && <ResumeStep value={resume} onChange={setResume} />}
-            {activeStep === 5 && <SecretsStep value={secrets} onChange={setSecrets} />}
+            {activeStep === 5 && <OutreachStep value={outreach} onChange={setOutreach} />}
+            {activeStep === 6 && <SecretsStep value={secrets} onChange={setSecrets} />}
           </Box>
 
           <Stack direction="row" justifyContent="space-between">

@@ -3,6 +3,7 @@ import { LandingPage } from './pages/LandingPage'
 import { AuthPage } from './pages/AuthPage'
 import { Dashboard } from './pages/Dashboard'
 import { JobsDashboard } from './pages/JobsDashboard'
+import { OutreachesDashboard } from './pages/OutreachesDashboard'
 import { OnboardingWizard } from './pages/OnboardingWizard'
 import { SettingsLayout } from './pages/settings/SettingsLayout'
 import { SettingsSectionPage } from './pages/settings/SettingsSectionPage'
@@ -40,6 +41,7 @@ export default function App() {
         <Route path="questions" element={<SettingsSectionPage section="questions" />} />
         <Route path="settings" element={<SettingsSectionPage section="settings" />} />
         <Route path="resume" element={<SettingsSectionPage section="resume" />} />
+        <Route path="outreach" element={<SettingsSectionPage section="outreach" />} />
         <Route path="secrets" element={<SettingsSectionPage section="secrets" />} />
       </Route>
       <Route
@@ -55,6 +57,14 @@ export default function App() {
         element={
           <RequireAuth>
             <JobsDashboard />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/outreaches"
+        element={
+          <RequireAuth>
+            <OutreachesDashboard />
           </RequireAuth>
         }
       />

@@ -21,6 +21,8 @@ class User(Base):
     runs = relationship("Run", back_populates="user")
     job_applications = relationship("JobApplication", back_populates="user")
     resumes = relationship("Resume", back_populates="user")
+    recruiter_contacts = relationship("RecruiterContact", back_populates="user")
+    outreach_events = relationship("OutreachEvent", back_populates="user")
 
 
 class Config(Base):
@@ -39,6 +41,7 @@ class Config(Base):
     search = Column(Text, nullable=True)
     settings = Column(Text, nullable=True)
     resume = Column(Text, nullable=True)
+    outreach = Column(Text, nullable=True)
     other = Column(Text, nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
@@ -57,6 +60,7 @@ class Run(Base):
 
     # pending/running/stopping/stopped/success/failed
     status = Column(String(20), nullable=False, default="pending")
+    run_type = Column(String(30), nullable=False, default="apply")
     started_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     finished_at = Column(DateTime, nullable=True)
     pid = Column(Integer, nullable=True)
@@ -64,11 +68,13 @@ class Run(Base):
     killed_at = Column(DateTime, nullable=True)
 
     config_snapshot = Column(Text, nullable=True)  # JSON
+    run_input = Column(Text, nullable=True)  # JSON
     log_excerpt = Column(Text, nullable=True)
     error_message = Column(Text, nullable=True)
 
     user = relationship("User", back_populates="runs")
     job_applications = relationship("JobApplication", back_populates="run")
+    outreach_events = relationship("OutreachEvent", back_populates="run")
 
 
 class Resume(Base):
@@ -124,3 +130,55 @@ class JobApplication(Base):
 
     run = relationship("Run", back_populates="job_applications")
     user = relationship("User", back_populates="job_applications")
+
+
+class RecruiterContact(Base):
+    __tablename__ = "recruiter_contacts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+
+    linkedin_profile_url = Column(Text, nullable=False)
+    linkedin_member_id = Column(String(128), nullable=True, index=True)
+    name = Column(String(255), nullable=True)
+    headline = Column(Text, nullable=True)
+    company = Column(String(255), nullable=True)
+    location = Column(String(255), nullable=True)
+    email = Column(String(255), nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow,
+                        onupdate=datetime.utcnow, nullable=False)
+
+    user = relationship("User", back_populates="recruiter_contacts")
+    outreach_events = relationship("OutreachEvent", back_populates="recruiter_contact")
+
+
+class OutreachEvent(Base):
+    __tablename__ = "outreach_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    run_id = Column(Integer, ForeignKey("runs.id"), nullable=False, index=True)
+    recruiter_contact_id = Column(Integer, ForeignKey("recruiter_contacts.id"), nullable=True, index=True)
+
+    role = Column(String(255), nullable=True)
+    company_filter = Column(String(255), nullable=True)
+    search_context = Column(Text, nullable=True)
+    message_input = Column(Text, nullable=True)
+    message_sent = Column(Text, nullable=True)
+    used_ai = Column(Boolean, nullable=False, default=False)
+    action_type = Column(String(50), nullable=False, default="message")
+    status = Column(String(30), nullable=False, default="drafted")
+    reason = Column(Text, nullable=True)
+    recruiter_profile_url = Column(Text, nullable=True)
+    recruiter_email = Column(String(255), nullable=True)
+    sent_at = Column(DateTime, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow,
+                        onupdate=datetime.utcnow, nullable=False)
+
+    user = relationship("User", back_populates="outreach_events")
+    run = relationship("Run", back_populates="outreach_events")
+    recruiter_contact = relationship("RecruiterContact", back_populates="outreach_events")

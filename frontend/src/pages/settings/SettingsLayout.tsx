@@ -13,6 +13,7 @@ import { ArrowBack, CheckCircle, RocketLaunch, Save } from '@mui/icons-material'
 import { useNavigate, useLocation, Outlet, useOutletContext } from 'react-router-dom'
 import { useSettingsConfig } from './useSettingsConfig'
 import type {
+  OutreachConfig,
   PersonalsConfig,
   QuestionsConfig,
   ResumeConfig,
@@ -27,6 +28,7 @@ const sections = [
   { key: 'questions', label: 'Questions' },
   { key: 'settings', label: 'Settings' },
   { key: 'resume', label: 'Resume' },
+  { key: 'outreach', label: 'Outreach' },
   { key: 'secrets', label: 'Secrets' },
 ] as const
 
@@ -41,6 +43,8 @@ export type SettingsOutletContext = {
   setSettings: React.Dispatch<React.SetStateAction<SettingsConfig>>
   resume: ResumeConfig
   setResume: React.Dispatch<React.SetStateAction<ResumeConfig>>
+  outreach: OutreachConfig
+  setOutreach: React.Dispatch<React.SetStateAction<OutreachConfig>>
   secrets: SecretsConfig
   setSecrets: React.Dispatch<React.SetStateAction<SecretsConfig>>
 }
@@ -164,6 +168,8 @@ export function SettingsLayout() {
                   setSettings: cfg.setSettings,
                   resume: cfg.resume,
                   setResume: cfg.setResume,
+                  outreach: cfg.outreach,
+                  setOutreach: cfg.setOutreach,
                   secrets: cfg.secrets,
                   setSecrets: cfg.setSecrets,
                 }}
@@ -197,4 +203,3 @@ export function SettingsLayout() {
     </Box>
   )
 }
-

@@ -5,9 +5,10 @@ import { ResumeStep } from '../onboarding/ResumeStep'
 import { SearchStep } from '../onboarding/SearchStep'
 import { SecretsStep } from '../onboarding/SecretsStep'
 import { SettingsStep } from '../onboarding/SettingsStep'
+import { OutreachStep } from '../onboarding/OutreachStep'
 import { useSettingsOutlet } from './SettingsLayout'
 
-type Section = 'personals' | 'search' | 'questions' | 'settings' | 'resume' | 'secrets'
+type Section = 'personals' | 'search' | 'questions' | 'settings' | 'resume' | 'outreach' | 'secrets'
 
 type Props = {
   section: Section
@@ -27,10 +28,11 @@ export function SettingsSectionPage({ section }: Props) {
       return <SettingsStep value={ctx.settings} onChange={ctx.setSettings} />
     case 'resume':
       return <ResumeStep value={ctx.resume} onChange={ctx.setResume} />
+    case 'outreach':
+      return <OutreachStep value={ctx.outreach} onChange={ctx.setOutreach} />
     case 'secrets':
       return <SecretsStep value={ctx.secrets} onChange={ctx.setSecrets} />
     default:
       return <Navigate to="/settings/personals" replace />
   }
 }
-

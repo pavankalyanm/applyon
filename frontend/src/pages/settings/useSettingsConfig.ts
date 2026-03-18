@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { api } from '../../api'
 import type {
   ConfigResponse,
+  OutreachConfig,
   PersonalsConfig,
   QuestionsConfig,
   ResumeConfig,
@@ -12,6 +13,7 @@ import type {
 import {
   defaultPersonals,
   defaultQuestions,
+  defaultOutreach,
   defaultResume,
   defaultSearch,
   defaultSecrets,
@@ -27,6 +29,7 @@ export function useSettingsConfig() {
   const [search, setSearch] = useState<SearchConfig>(defaultSearch)
   const [settings, setSettings] = useState<SettingsConfig>(defaultSettings)
   const [resume, setResume] = useState<ResumeConfig>(defaultResume)
+  const [outreach, setOutreach] = useState<OutreachConfig>(defaultOutreach)
   const [secrets, setSecrets] = useState<SecretsConfig>(defaultSecrets)
 
   useEffect(() => {
@@ -74,6 +77,9 @@ export function useSettingsConfig() {
         if (data.resume) {
           setResume({ ...defaultResume, ...data.resume })
         }
+        if (data.outreach) {
+          setOutreach({ ...defaultOutreach, ...data.outreach })
+        }
       } finally {
         setLoading(false)
       }
@@ -95,6 +101,7 @@ export function useSettingsConfig() {
         questions: questionPayload,
         search,
         settings: { ...settings, secrets },
+        outreach,
       })
     } finally {
       setSaving(false)
@@ -116,6 +123,8 @@ export function useSettingsConfig() {
     setSettings,
     resume,
     setResume,
+    outreach,
+    setOutreach,
     secrets,
     setSecrets,
   }

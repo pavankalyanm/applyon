@@ -90,6 +90,19 @@ export type ResumeConfig = {
   default_resume_id?: string | null
 }
 
+export type OutreachConfig = {
+  default_role: string
+  default_company: string
+  default_recruiter_search_context: string
+  default_message_content: string
+  use_ai_for_outreach: boolean
+  attach_default_resume: boolean
+  max_outreaches_per_run: number | null
+  max_outreaches_per_day: number | null
+  require_review_before_send: boolean
+  collect_recruiter_email_if_available: boolean
+}
+
 export type SecretsConfig = {
   username: string
   password: string
@@ -152,6 +165,8 @@ export type ConfigResponse = {
   search?: Partial<SearchConfig> | null
   settings?: Partial<SettingsConfig & { secrets?: SecretsConfig }> | null
   resume?: Partial<ResumeConfig> | null
+  outreach?: Partial<OutreachConfig> | null
+  other?: Record<string, unknown> | null
 }
 
 export const defaultPersonals: PersonalsConfig = {
@@ -244,6 +259,19 @@ export const defaultSettings: SettingsConfig = {
 
 export const defaultResume: ResumeConfig = {
   default_resume_id: null,
+}
+
+export const defaultOutreach: OutreachConfig = {
+  default_role: '',
+  default_company: '',
+  default_recruiter_search_context: '',
+  default_message_content: '',
+  use_ai_for_outreach: false,
+  attach_default_resume: false,
+  max_outreaches_per_run: 5,
+  max_outreaches_per_day: 10,
+  require_review_before_send: true,
+  collect_recruiter_email_if_available: true,
 }
 
 export const defaultSecrets: SecretsConfig = {

@@ -34,12 +34,22 @@ def get_run(run_id: int, current_user: models.User = Depends(get_current_user), 
 
 
 @router.post("", response_model=schemas.RunOut)
-def create_run(current_user: models.User = Depends(get_current_user), session: Session = Depends(db.get_session)):
+def create_run(
+    payload: schemas.RunCreate | None = None,
+    current_user: models.User = Depends(get_current_user),
+    session: Session = Depends(db.get_session),
+):
     """
     Create a Run row and trigger the bot_runner in background.
     """
-    run = models.Run(user_id=current_user.id, status="pending",
-                     started_at=datetime.utcnow())
+    payload = payload or schemas.RunCreate()
+    run = models.Run(
+        user_id=current_user.id,
+        status="pending",
+        run_type=payload.run_type or "apply",
+        run_input=None if payload.run_input is None else bot_runner.dumps_json(payload.run_input),
+        started_at=datetime.utcnow(),
+    )
     session.add(run)
     session.commit()
     session.refresh(run)
@@ -48,6 +58,16 @@ def create_run(current_user: models.User = Depends(get_current_user), session: S
     bot_runner.start_run(run.id)
 
     return run
+
+
+@router.post("/outreach", response_model=schemas.RunOut)
+def create_outreach_run(
+    payload: schemas.RunCreate,
+    current_user: models.User = Depends(get_current_user),
+    session: Session = Depends(db.get_session),
+):
+    payload.run_type = "outreach"
+    return create_run(payload=payload, current_user=current_user, session=session)
 
 
 @router.post("/{run_id}/stop")

@@ -8,12 +8,18 @@ import {
   Collapse,
   Container,
   Divider,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   IconButton,
   MenuItem,
   Pagination,
   Paper,
   Select,
   Stack,
+  Switch,
+  TextField,
   Toolbar,
   Typography,
 } from '@mui/material'
@@ -43,6 +49,7 @@ type RunStatus = 'pending' | 'running' | 'stopping' | 'stopped' | 'success' | 'c
 type Run = {
   id: number
   status: RunStatus
+  run_type?: string
   started_at: string
   finished_at?: string | null
   error_message?: string | null
@@ -72,6 +79,15 @@ export function Dashboard() {
   const [runDetails, setRunDetails] = useState<Record<number, RunDetail>>({})
   const [resumes, setResumes] = useState<{ id: string; label: string }[]>([])
   const [selectedResumeId, setSelectedResumeId] = useState<string | ''>('')
+  const [outreachDialogOpen, setOutreachDialogOpen] = useState(false)
+  const [outreachDraft, setOutreachDraft] = useState({
+    role: '',
+    company: '',
+    recruiter_search_context: '',
+    message_content: '',
+    use_ai_for_outreach: false,
+    attach_default_resume: false,
+  })
   const runsPerPage = 25
 
   async function refreshExpandedRunDetails(runIds?: number[]) {
@@ -105,6 +121,23 @@ export function Dashboard() {
       if (!selectedResumeId && data.default_resume_id) {
         setSelectedResumeId(data.default_resume_id as string)
       }
+      const configResp = await api.get('/config')
+      const outreach = configResp.data?.outreach || {}
+      const search = configResp.data?.search || {}
+      setOutreachDraft((current) => ({
+        role: current.role || outreach.default_role || search.search_terms?.[0] || '',
+        company: current.company || outreach.default_company || '',
+        recruiter_search_context: current.recruiter_search_context || outreach.default_recruiter_search_context || '',
+        message_content: current.message_content || outreach.default_message_content || '',
+        attach_default_resume:
+          current.role || current.message_content || current.company || current.recruiter_search_context
+            ? current.attach_default_resume
+            : Boolean(outreach.attach_default_resume),
+        use_ai_for_outreach:
+          current.message_content || current.role
+            ? current.use_ai_for_outreach
+            : Boolean(outreach.use_ai_for_outreach),
+      }))
     } catch {
       // silent
     }
@@ -166,6 +199,23 @@ export function Dashboard() {
   const currentPage = Math.min(runsPage, totalPages)
   const paginatedRuns = runs.slice((currentPage - 1) * runsPerPage, currentPage * runsPerPage)
 
+  async function startOutreachRun() {
+    setError(null)
+    setLoading(true)
+    try {
+      await api.post('/runs/outreach', {
+        run_type: 'outreach',
+        run_input: outreachDraft,
+      })
+      setOutreachDialogOpen(false)
+      await refresh()
+    } catch (e: any) {
+      setError(e?.response?.data?.detail ?? 'Failed to start outreach run')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <Box sx={{ minHeight: '100dvh', bgcolor: '#f8faf9' }}>
       <AppBar
@@ -192,6 +242,14 @@ export function Dashboard() {
               sx={{ borderColor: '#d1d5db', color: '#374151' }}
             >
               Jobs
+            </Button>
+            <Button
+              variant="outlined"
+              startIcon={<OpenInNew />}
+              onClick={() => navigate('/outreaches')}
+              sx={{ borderColor: '#d1d5db', color: '#374151' }}
+            >
+              Outreaches
             </Button>
             <IconButton onClick={() => navigate('/settings/personals')} size="small" title="Settings">
               <Settings sx={{ fontSize: 20, color: '#64748b' }} />
@@ -339,6 +397,17 @@ export function Dashboard() {
                 >
                   {loading ? 'Starting...' : 'Start Bot'}
                 </Button>
+                <Button
+                  variant="outlined"
+                  onClick={() => setOutreachDialogOpen(true)}
+                  sx={{
+                    borderColor: 'rgba(255,255,255,0.3)',
+                    color: '#fff',
+                    '&:hover': { borderColor: '#fff', bgcolor: 'rgba(255,255,255,0.1)' },
+                  }}
+                >
+                  Start Outreach
+                </Button>
                 {activeRun && (
                   <>
                     <Button
@@ -457,6 +526,9 @@ export function Dashboard() {
                               <Typography fontWeight={600} sx={{ color: '#0f172a' }}>
                                 Run #{run.id}
                               </Typography>
+                              <Typography fontSize="0.8rem" color="text.secondary" sx={{ textTransform: 'capitalize' }}>
+                                {run.run_type || 'apply'} run
+                              </Typography>
                               <Typography fontSize="0.8rem" color="text.secondary">
                                 Started {new Date(run.started_at).toLocaleString()}
                               </Typography>
@@ -555,6 +627,77 @@ export function Dashboard() {
           </Box>
         </Stack>
       </Container>
+      <Dialog open={outreachDialogOpen} onClose={() => setOutreachDialogOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Start Outreach</DialogTitle>
+        <DialogContent sx={{ pt: 2 }}>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField
+              label="Role"
+              value={outreachDraft.role}
+              onChange={(event) => setOutreachDraft((current) => ({ ...current, role: event.target.value }))}
+              required
+              fullWidth
+            />
+            <TextField
+              label="Company"
+              value={outreachDraft.company}
+              onChange={(event) => setOutreachDraft((current) => ({ ...current, company: event.target.value }))}
+              helperText="Optional. If provided, the bot will focus on recruiters from this company."
+              fullWidth
+            />
+            <TextField
+              label="Recruiter search context"
+              value={outreachDraft.recruiter_search_context}
+              onChange={(event) =>
+                setOutreachDraft((current) => ({ ...current, recruiter_search_context: event.target.value }))
+              }
+              helperText="Optional context such as technical recruiter, hiring manager, entry-level hiring."
+              fullWidth
+            />
+            <TextField
+              label={outreachDraft.use_ai_for_outreach ? 'Message context for AI' : 'Exact message content'}
+              value={outreachDraft.message_content}
+              onChange={(event) => setOutreachDraft((current) => ({ ...current, message_content: event.target.value }))}
+              multiline
+              minRows={6}
+              helperText={
+                outreachDraft.use_ai_for_outreach
+                  ? 'AI will refine this context into the message that gets sent.'
+                  : 'This exact content will be sent without AI rewriting.'
+              }
+              fullWidth
+            />
+            <Stack direction="row" justifyContent="space-between" alignItems="center">
+              <Typography sx={{ color: '#0f172a', fontWeight: 600 }}>Attach default resume</Typography>
+              <Switch
+                checked={outreachDraft.attach_default_resume}
+                onChange={(event) =>
+                  setOutreachDraft((current) => ({ ...current, attach_default_resume: event.target.checked }))
+                }
+              />
+            </Stack>
+            <Stack direction="row" justifyContent="space-between" alignItems="center">
+              <Typography sx={{ color: '#0f172a', fontWeight: 600 }}>Use AI to refine and send</Typography>
+              <Switch
+                checked={outreachDraft.use_ai_for_outreach}
+                onChange={(event) =>
+                  setOutreachDraft((current) => ({ ...current, use_ai_for_outreach: event.target.checked }))
+                }
+              />
+            </Stack>
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3 }}>
+          <Button onClick={() => setOutreachDialogOpen(false)}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={startOutreachRun}
+            disabled={loading || !outreachDraft.role.trim() || !outreachDraft.message_content.trim()}
+          >
+            {loading ? 'Starting...' : 'Start Outreach'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }

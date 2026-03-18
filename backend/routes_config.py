@@ -48,6 +48,7 @@ def get_config(
         search=_loads_or_none(cfg.search),
         settings=_loads_or_none(cfg.settings),
         resume=_resume_payload_or_none(cfg.resume),
+        outreach=_loads_or_none(cfg.outreach),
         other=_loads_or_none(cfg.other),
     )
 
@@ -79,6 +80,8 @@ def update_config(
         if isinstance(payload.resume, dict):
             default_resume_id = payload.resume.get("default_resume_id")
         cfg.resume = json.dumps({"default_resume_id": default_resume_id})
+    if payload.outreach is not None:
+        cfg.outreach = json.dumps(payload.outreach)
     if payload.other is not None:
         cfg.other = json.dumps(payload.other)
 

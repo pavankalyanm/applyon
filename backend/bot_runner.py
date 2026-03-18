@@ -34,6 +34,10 @@ BOT_ENTRY = BOT_DIR / "runAiBot.py"
 RUNTIME_DIR = PROJECT_ROOT / "bot_runtime"
 
 
+def dumps_json(value: object) -> str:
+    return json.dumps(value)
+
+
 def _user_runtime_dir(user_id: int) -> Path:
     return RUNTIME_DIR / f"user_{user_id}"
 
@@ -77,7 +81,7 @@ def _load_optional_config_section(raw_value: Optional[str], section_name: str) -
     return _load_config_section(raw_value, section_name)
 
 
-def _build_run_config_snapshot(user_id: int) -> dict:
+def _build_run_config_snapshot(user_id: int, run_type: str = "apply", run_input: Optional[dict] = None) -> dict:
     with db.session_scope() as session:
         cfg = session.query(models.Config).filter(models.Config.user_id == user_id).one_or_none()
         if cfg is None:
@@ -150,6 +154,11 @@ def _build_run_config_snapshot(user_id: int) -> dict:
             "search": _load_config_section(cfg.search, "search"),
             "settings": settings,
             "resume": resume_cfg,
+            "outreach": {
+                **_load_optional_config_section(cfg.outreach, "outreach"),
+                **(run_input or {}),
+                "run_type": run_type,
+            },
             "other": _load_optional_config_section(cfg.other, "other"),
             "secrets": secrets,
         }
@@ -190,6 +199,12 @@ def _persist_job_event(run_id: int, user_id: int, ev: dict) -> None:
     kind = ev.get("event")
     if kind == "learned_answer":
         _persist_learned_answer_event(user_id, ev)
+        return
+    if kind == "outreach_settings_update":
+        _persist_outreach_settings_update(user_id, ev)
+        return
+    if kind and str(kind).startswith("outreach_"):
+        _persist_outreach_event(run_id, user_id, ev)
         return
 
     metadata = MetaData()
@@ -319,6 +334,7 @@ def _validate_backend_config_imports(*, python_exe: str, project_root: Path, env
         "-c",
         (
             "import config.personals, config.questions, config.search, config.settings, config.resume, config.other, config.secrets; "
+            "import config.outreach; "
             "print('OK')"
         ),
     ]
@@ -440,6 +456,111 @@ def _persist_learned_answer_event(user_id: int, ev: dict) -> None:
         session.add(cfg)
 
 
+def _persist_outreach_event(run_id: int, user_id: int, ev: dict) -> None:
+    event_name = str(ev.get("event") or "")
+    recruiter_name = str(ev.get("recruiter_name") or "").strip() or None
+    recruiter_profile_url = str(ev.get("recruiter_profile_url") or "").strip() or None
+    recruiter_email = str(ev.get("recruiter_email") or "").strip() or None
+    recruiter_company = str(ev.get("recruiter_company") or ev.get("company_filter") or "").strip() or None
+    recruiter_headline = str(ev.get("recruiter_headline") or "").strip() or None
+    recruiter_location = str(ev.get("recruiter_location") or "").strip() or None
+    recruiter_member_id = str(ev.get("recruiter_member_id") or "").strip() or None
+
+    if not recruiter_profile_url:
+        return
+
+    sent_at = _parse_event_datetime(ev.get("sent_at"))
+    now = datetime.utcnow()
+    with db.session_scope() as session:
+        contact = (
+            session.query(models.RecruiterContact)
+            .filter(
+                models.RecruiterContact.user_id == user_id,
+                models.RecruiterContact.linkedin_profile_url == recruiter_profile_url,
+            )
+            .one_or_none()
+        )
+        if contact is None:
+            contact = models.RecruiterContact(
+                user_id=user_id,
+                linkedin_profile_url=recruiter_profile_url,
+            )
+            session.add(contact)
+            session.flush()
+
+        contact.name = recruiter_name or contact.name
+        contact.headline = recruiter_headline or contact.headline
+        contact.company = recruiter_company or contact.company
+        contact.location = recruiter_location or contact.location
+        contact.email = recruiter_email or contact.email
+        contact.linkedin_member_id = recruiter_member_id or contact.linkedin_member_id
+
+        event = (
+            session.query(models.OutreachEvent)
+            .filter(
+                models.OutreachEvent.run_id == run_id,
+                models.OutreachEvent.user_id == user_id,
+                models.OutreachEvent.recruiter_profile_url == recruiter_profile_url,
+            )
+            .order_by(models.OutreachEvent.id.desc())
+            .one_or_none()
+        )
+
+        if event is None:
+            event = models.OutreachEvent(
+                user_id=user_id,
+                run_id=run_id,
+                recruiter_contact_id=contact.id,
+                recruiter_profile_url=recruiter_profile_url,
+                created_at=now,
+            )
+            session.add(event)
+
+        event.recruiter_contact_id = contact.id
+        event.role = ev.get("role") or event.role
+        event.company_filter = ev.get("company_filter") or event.company_filter
+        event.search_context = ev.get("search_context") or event.search_context
+        event.message_input = ev.get("message_input") or event.message_input
+        event.message_sent = ev.get("message_sent") or event.message_sent
+        event.used_ai = bool(ev.get("used_ai")) if ev.get("used_ai") is not None else event.used_ai
+        event.action_type = str(ev.get("action_type") or event.action_type or "message")
+        status = str(ev.get("status") or "").strip()
+        if not status:
+            if event_name == "outreach_sent":
+                status = "sent"
+            elif event_name == "outreach_failed":
+                status = "failed"
+            elif event_name == "outreach_review_required":
+                status = "review_pending"
+            elif event_name == "outreach_discovered":
+                status = "drafted"
+            else:
+                status = event.status or "drafted"
+        event.status = status
+        event.reason = ev.get("reason") or event.reason
+        event.recruiter_email = recruiter_email or event.recruiter_email
+        event.sent_at = sent_at or event.sent_at
+        event.updated_at = now
+
+
+def _persist_outreach_settings_update(user_id: int, ev: dict) -> None:
+    updates = ev.get("updates")
+    if not isinstance(updates, dict) or not updates:
+        return
+
+    with db.session_scope() as session:
+        cfg = session.query(models.Config).filter(models.Config.user_id == user_id).one_or_none()
+        if cfg is None:
+            cfg = models.Config(user_id=user_id)
+            session.add(cfg)
+            session.flush()
+
+        outreach = _load_optional_config_section(cfg.outreach, "outreach")
+        outreach.update(updates)
+        cfg.outreach = json.dumps(outreach)
+        session.add(cfg)
+
+
 def _run_worker(run_id: int) -> None:
     try:
         snapshot: dict
@@ -448,7 +569,15 @@ def _run_worker(run_id: int) -> None:
             if run is None:
                 return
             user = session.query(models.User).filter(models.User.id == run.user_id).one()
-            snapshot = _build_run_config_snapshot(user.id)
+            run_input = None
+            if run.run_input:
+                try:
+                    parsed_run_input = json.loads(run.run_input)
+                    if isinstance(parsed_run_input, dict):
+                        run_input = parsed_run_input
+                except Exception:
+                    run_input = None
+            snapshot = _build_run_config_snapshot(user.id, run.run_type or "apply", run_input)
             run.status = "running"
             run.started_at = datetime.utcnow()
             run.config_snapshot = json.dumps(snapshot)

@@ -1,5 +1,5 @@
 # Imports
-from typing import Literal
+from typing import Literal, Optional
 from modules.validator import validate_config
 from modules.clickers_and_finders import *
 from modules.helpers import *
@@ -10,6 +10,7 @@ from config.secrets import use_AI, username, password, ai_provider
 from config.search import *
 from config.questions import *
 from config.personals import *
+from config.outreach import *
 from selenium.common.exceptions import NoSuchElementException, ElementClickInterceptedException, NoSuchWindowException, ElementNotInteractableException, WebDriverException
 from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support.select import Select
@@ -24,6 +25,7 @@ import re
 import time
 import pyautogui
 import json
+from urllib.parse import quote
 
 # Use a fallback when Tkinter is missing (e.g. Homebrew Python on macOS without python-tk)
 
@@ -157,6 +159,7 @@ easy_applied_count = 0
 external_jobs_count = 0
 failed_count = 0
 skip_count = 0
+outreach_count = 0
 dailyEasyApplyLimitReached = False
 
 re_experience = re.compile(
@@ -1077,6 +1080,484 @@ def emit_job_progress(
     )
 
 
+def emit_outreach_event(event_name: str, payload: dict) -> None:
+    emit_job_event(event_name, payload)
+
+
+def _extract_first_email(text: str) -> Optional[str]:
+    match = re.search(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", text or "", re.IGNORECASE)
+    return match.group(0) if match else None
+
+
+def _linkedin_people_search_url(role: str, company_filter: str, recruiter_search_context: str) -> str:
+    parts = [role.strip()]
+    if company_filter.strip():
+        parts.append(company_filter.strip())
+    if recruiter_search_context.strip():
+        parts.append(recruiter_search_context.strip())
+    parts.append("recruiter")
+    query = " ".join(part for part in parts if part)
+    return f"https://www.linkedin.com/search/results/people/?keywords={quote(query)}"
+
+
+def _collect_recruiter_candidates(limit: int) -> list[str]:
+    wait.until(lambda d: d.find_elements(By.XPATH, "//a[contains(@href,'/in/')]"))
+    anchors = driver.find_elements(By.XPATH, "//a[contains(@href,'/in/')]")
+    candidates: list[str] = []
+    seen: set[str] = set()
+    for anchor in anchors:
+        href = (anchor.get_attribute("href") or "").split("?")[0].strip()
+        if not href or "/in/" not in href:
+            continue
+        if href in seen:
+            continue
+        seen.add(href)
+        candidates.append(href)
+        if len(candidates) >= limit:
+            break
+    return candidates
+
+
+def _profile_text(xpath: str) -> str:
+    try:
+        return driver.find_element(By.XPATH, xpath).text.strip()
+    except Exception:
+        return ""
+
+
+def _compose_outreach_message(
+    *,
+    recruiter_name: str,
+    recruiter_company: str,
+    role_value: str,
+    company_value: str,
+    recruiter_search_value: str,
+    message_content_value: str,
+    use_ai_value: bool,
+) -> str:
+    base_message = message_content_value.strip()
+    if not use_ai_value or not use_AI or not aiClient:
+        return base_message
+
+    prompt = (
+        f"Write a concise LinkedIn outreach message to a recruiter.\n\n"
+        f"Target role: {role_value or 'Unknown'}\n"
+        f"Target company: {company_value or recruiter_company or 'Unknown'}\n"
+        f"Recruiter name: {recruiter_name or 'there'}\n"
+        f"Recruiter context: {recruiter_search_value or 'N/A'}\n"
+        f"Message brief from the user:\n{base_message}\n\n"
+        f"Constraints:\n"
+        f"- Keep it professional and under 550 characters.\n"
+        f"- Do not invent facts.\n"
+        f"- Do not mention referrals unless the user explicitly said so.\n"
+        f"- Return only the final message.\n"
+    )
+    try:
+        if ai_provider in ["openai", "groq"]:
+            response = ai_answer_question(aiClient, prompt, question_type="textarea", user_information_all=user_information_all)
+        elif ai_provider == "deepseek":
+            response = deepseek_answer_question(aiClient, prompt, question_type="textarea", user_information_all=user_information_all)
+        elif ai_provider == "gemini":
+            response = gemini_answer_question(aiClient, prompt, question_type="textarea", user_information_all=user_information_all)
+        else:
+            response = base_message
+        return str(response or base_message).strip() or base_message
+    except Exception as exc:
+        print_lg("AI outreach generation failed, using exact content.", exc)
+        return base_message
+
+
+def _fill_message_box(message: str) -> None:
+    textbox = None
+    selectors = [
+        "//div[@role='textbox']",
+        "//textarea",
+        "//div[contains(@class,'msg-form__contenteditable')]",
+    ]
+    for xpath in selectors:
+        try:
+            textbox = WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.XPATH, xpath)))
+            if textbox:
+                break
+        except Exception:
+            continue
+    if textbox is None:
+        raise NoSuchElementException("Could not find LinkedIn message input.")
+
+    try:
+        textbox.click()
+        textbox.send_keys(Keys.CONTROL + "a")
+        textbox.send_keys(message)
+    except Exception:
+        try:
+            textbox.clear()
+            textbox.send_keys(message)
+        except Exception as exc:
+            raise NoSuchElementException("Could not fill LinkedIn message input.") from exc
+
+
+def _find_primary_profile_action_button(preferred_label: str):
+    containers = [
+        "(//main//section[@data-member-id][1]//*[contains(@class,'pv-top-card-v2-ctas__custom')])[1]",
+        "(//main//section[@data-member-id][1]//*[contains(@class,'pvs-profile-actions__custom')])[1]",
+        "(//main//section[@data-member-id][1])[1]",
+    ]
+    normalized_label = preferred_label.strip()
+    for container_xpath in containers:
+        try:
+            container = driver.find_element(By.XPATH, container_xpath)
+        except Exception:
+            continue
+
+        button_xpaths = [
+            f".//button[contains(@aria-label,'{normalized_label}')]",
+            f".//a[contains(@aria-label,'{normalized_label}')]",
+            f".//button[.//span[normalize-space()='{normalized_label}']]",
+            f".//a[.//span[normalize-space()='{normalized_label}']]",
+            f".//*[self::button or self::a][contains(normalize-space(.), '{normalized_label}')]",
+        ]
+        for button_xpath in button_xpaths:
+            try:
+                button = container.find_element(By.XPATH, button_xpath)
+                if button.is_displayed():
+                    return button
+            except Exception:
+                continue
+    return None
+
+
+def _click_message_send_button() -> bool:
+    selectors = [
+        "//div[contains(@class,'msg-overlay-conversation-bubble')]//button[contains(@class,'msg-form__send-btn') and @type='submit']",
+        "//div[contains(@class,'msg-overlay-conversation-bubble')]//form[contains(@class,'msg-form')]//button[@type='submit']",
+        "//div[contains(@class,'msg-overlay-conversation-bubble')]//button[contains(@aria-label,'Send')]",
+    ]
+    for xpath in selectors:
+        try:
+            button = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.XPATH, xpath)))
+            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", button)
+            button.click()
+            return True
+        except Exception:
+            continue
+    return False
+
+
+def _dismiss_message_modal() -> None:
+    for xpath in [
+        "//div[contains(@class,'msg-overlay-conversation-bubble')]//button[contains(@class,'msg-overlay-bubble-header__control') and .//*[contains(@data-test-icon,'close-small')]]",
+        "//div[contains(@class,'msg-overlay-conversation-bubble')]//button[contains(@aria-label,'Close')]",
+        "//button[contains(@aria-label,'Dismiss')]",
+    ]:
+        try:
+            driver.find_element(By.XPATH, xpath).click()
+            return
+        except Exception:
+            continue
+
+
+def _attach_outreach_resume_if_needed() -> bool:
+    if not attach_default_resume:
+        return False
+    if not default_resume_path or not os.path.exists(default_resume_path):
+        print_lg("Default resume attachment requested, but no valid resume path was available.")
+        return False
+
+    selectors = [
+        "//div[contains(@class,'msg-overlay-conversation-bubble')]//input[contains(@class,'msg-form__attachment-upload-input') and contains(@accept,'.pdf')]",
+        "//div[contains(@class,'msg-overlay-conversation-bubble')]//input[contains(@class,'msg-form__attachment-upload-input') and contains(@accept,'.docx')]",
+        "//div[contains(@class,'msg-overlay-conversation-bubble')]//input[contains(@class,'msg-form__attachment-upload-input')][not(contains(@accept,'image/*') and string-length(@accept) < 20)]",
+    ]
+    for xpath in selectors:
+        try:
+            file_input = WebDriverWait(driver, 3).until(EC.presence_of_element_located((By.XPATH, xpath)))
+            driver.execute_script("arguments[0].classList.remove('hidden'); arguments[0].style.display='block';", file_input)
+            file_input.send_keys(os.path.abspath(default_resume_path))
+            sleep_with_stop(2)
+            print_step("Attached resume to outreach", os.path.basename(default_resume_path))
+            return True
+        except Exception:
+            continue
+    print_lg("Could not find the LinkedIn file attachment input for outreach.")
+    return False
+
+
+def _send_recruiter_outreach(
+    *,
+    profile_url: str,
+    search_url: str,
+    role_value: str,
+    company_value: str,
+    recruiter_search_value: str,
+    message_content_value: str,
+    use_ai_value: bool,
+) -> bool:
+    global outreach_count, failed_count
+    driver.get(profile_url)
+    sleep_with_stop(2)
+    ensure_not_stopping("during recruiter outreach profile review")
+
+    recruiter_name = _profile_text("//h1")
+    recruiter_headline = _profile_text("(//div[contains(@class,'text-body-medium')])[1]")
+    recruiter_location = _profile_text("(//span[contains(@class,'text-body-small')])[1]")
+    recruiter_company = company_value.strip() or _profile_text("(//section//span[contains(.,'Current company')]/following::span)[1]")
+    recruiter_email = _extract_first_email(driver.page_source) if collect_recruiter_email_if_available else None
+
+    emit_outreach_event(
+        "outreach_discovered",
+        {
+            "recruiter_name": recruiter_name,
+            "recruiter_headline": recruiter_headline,
+            "recruiter_company": recruiter_company,
+            "recruiter_location": recruiter_location,
+            "recruiter_email": recruiter_email,
+            "recruiter_profile_url": profile_url,
+            "role": role_value,
+            "company_filter": company_value,
+            "search_context": recruiter_search_value,
+            "message_input": message_content_value,
+            "used_ai": use_ai_value,
+            "status": "drafted",
+        },
+    )
+
+    message_text = _compose_outreach_message(
+        recruiter_name=recruiter_name,
+        recruiter_company=recruiter_company,
+        role_value=role_value,
+        company_value=company_value,
+        recruiter_search_value=recruiter_search_value,
+        message_content_value=message_content_value,
+        use_ai_value=use_ai_value,
+    )
+
+    message_opened = False
+    action_type = "message"
+    message_button = _find_primary_profile_action_button("Message")
+    if message_button is not None:
+        try:
+            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", message_button)
+            WebDriverWait(driver, 4).until(lambda _driver: message_button.is_displayed() and message_button.is_enabled())
+            message_button.click()
+            message_opened = True
+        except Exception:
+            message_opened = False
+
+    if not message_opened:
+        for xpath in [
+            "//main//*[not(ancestor::aside)]//button[.//span[normalize-space()='Message']]",
+            "//main//*[not(ancestor::aside)]//a[.//span[normalize-space()='Message']]",
+        ]:
+            try:
+                button = WebDriverWait(driver, 2).until(EC.element_to_be_clickable((By.XPATH, xpath)))
+                button.click()
+                message_opened = True
+                break
+            except Exception:
+                continue
+
+    if not message_opened:
+        connect_button = _find_primary_profile_action_button("Connect")
+        if connect_button is not None:
+            try:
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", connect_button)
+                WebDriverWait(driver, 3).until(lambda _driver: connect_button.is_displayed() and connect_button.is_enabled())
+                connect_button.click()
+                sleep_with_stop(1)
+                try:
+                    add_note = WebDriverWait(driver, 3).until(
+                        EC.element_to_be_clickable((By.XPATH, "//button[.//span[contains(normalize-space(),'Add a note')]]"))
+                    )
+                    add_note.click()
+                except Exception:
+                    pass
+                action_type = "connect_with_note"
+                message_opened = True
+            except Exception:
+                message_opened = False
+
+    if not message_opened:
+        failed_count += 1
+        emit_outreach_event(
+            "outreach_failed",
+            {
+                "recruiter_name": recruiter_name,
+                "recruiter_headline": recruiter_headline,
+                "recruiter_company": recruiter_company,
+                "recruiter_location": recruiter_location,
+                "recruiter_email": recruiter_email,
+                "recruiter_profile_url": profile_url,
+                "role": role_value,
+                "company_filter": company_value,
+                "search_context": recruiter_search_value,
+                "message_input": message_content_value,
+                "message_sent": message_text,
+                "used_ai": use_ai_value,
+                "action_type": action_type,
+                "status": "failed",
+                "reason": "No message or connect option available on profile",
+            },
+        )
+        return False
+
+    resume_attached = _attach_outreach_resume_if_needed()
+    _fill_message_box(message_text[:290] if action_type == "connect_with_note" else message_text)
+
+    if require_review_before_send:
+        decision = pyautogui.confirm(
+            f"Review the outreach prepared for {recruiter_name or 'this recruiter'}.\n\n"
+            f"You can inspect the browser first, then choose whether to send or skip.",
+            "Review outreach",
+            ["Skip outreach", "Send outreach", "Disable review & auto send"],
+        )
+        if decision == "Disable review & auto send":
+            emit_outreach_event(
+                "outreach_settings_update",
+                {
+                    "updates": {
+                        "require_review_before_send": False,
+                    }
+                },
+            )
+        elif decision != "Send outreach":
+            emit_outreach_event(
+                "outreach_review_required",
+                {
+                    "recruiter_name": recruiter_name,
+                    "recruiter_headline": recruiter_headline,
+                    "recruiter_company": recruiter_company,
+                    "recruiter_location": recruiter_location,
+                    "recruiter_email": recruiter_email,
+                    "recruiter_profile_url": profile_url,
+                    "role": role_value,
+                    "company_filter": company_value,
+                    "search_context": recruiter_search_value,
+                    "message_input": message_content_value,
+                    "message_sent": message_text,
+                    "used_ai": use_ai_value,
+                    "reason": "User skipped during outreach review",
+                    "action_type": action_type,
+                    "status": "skipped",
+                    "recruiter_email": recruiter_email,
+                },
+            )
+            _dismiss_message_modal()
+            driver.get(search_url)
+            sleep_with_stop(2)
+            return False
+
+    if not _click_message_send_button():
+        failed_count += 1
+        emit_outreach_event(
+            "outreach_failed",
+            {
+                "recruiter_name": recruiter_name,
+                "recruiter_headline": recruiter_headline,
+                "recruiter_company": recruiter_company,
+                "recruiter_location": recruiter_location,
+                "recruiter_email": recruiter_email,
+                "recruiter_profile_url": profile_url,
+                "role": role_value,
+                "company_filter": company_value,
+                "search_context": recruiter_search_value,
+                "message_input": message_content_value,
+                "message_sent": message_text,
+                "used_ai": use_ai_value,
+                "action_type": action_type,
+                "status": "failed",
+                "reason": "Could not click the LinkedIn send button",
+            },
+        )
+        return False
+
+    outreach_count += 1
+    sleep_with_stop(2)
+    emit_outreach_event(
+        "outreach_sent",
+        {
+            "recruiter_name": recruiter_name,
+            "recruiter_headline": recruiter_headline,
+            "recruiter_company": recruiter_company,
+            "recruiter_location": recruiter_location,
+            "recruiter_email": recruiter_email,
+            "recruiter_profile_url": profile_url,
+            "role": role_value,
+            "company_filter": company_value,
+            "search_context": recruiter_search_value,
+            "message_input": message_content_value,
+            "message_sent": message_text,
+            "used_ai": use_ai_value,
+            "action_type": action_type,
+            "status": "sent",
+            "sent_at": datetime.utcnow().isoformat(),
+            "reason": "resume_attached" if resume_attached else None,
+        },
+    )
+    _dismiss_message_modal()
+    sleep_with_stop(1)
+    driver.get(search_url)
+    sleep_with_stop(2)
+    return True
+
+
+def run_outreach(total_runs: int) -> int:
+    global failed_count
+    print_step("Starting outreach workflow")
+    role_value = default_role.strip()
+    company_value = default_company.strip()
+    recruiter_search_value = default_recruiter_search_context.strip()
+    message_content_value = default_message_content.strip()
+    use_ai_value = bool(use_ai_for_outreach)
+    if not role_value:
+        raise ValueError("Outreach role is required to start an outreach run.")
+    if not message_content_value:
+        raise ValueError("Outreach message content is required to start an outreach run.")
+
+    search_url = _linkedin_people_search_url(role_value, company_value, recruiter_search_value)
+    print_step("Opening recruiter search", search_url)
+    driver.get(search_url)
+    sleep_with_stop(3)
+    limit = max_outreaches_per_run or 5
+    candidates = _collect_recruiter_candidates(max(limit * 3, limit))
+    print_lg(f"Found {len(candidates)} recruiter candidates for outreach.")
+
+    for profile_url in candidates[:limit]:
+        ensure_not_stopping("during outreach loop")
+        try:
+            _send_recruiter_outreach(
+                profile_url=profile_url,
+                search_url=search_url,
+                role_value=role_value,
+                company_value=company_value,
+                recruiter_search_value=recruiter_search_value,
+                message_content_value=message_content_value,
+                use_ai_value=use_ai_value,
+            )
+        except StopRequested:
+            raise
+        except Exception as exc:
+            failed_count += 1
+            emit_outreach_event(
+                "outreach_failed",
+                {
+                    "recruiter_profile_url": profile_url,
+                    "role": role_value,
+                    "company_filter": company_value,
+                    "search_context": recruiter_search_value,
+                    "message_input": message_content_value,
+                    "used_ai": use_ai_value,
+                    "status": "failed",
+                    "reason": str(exc),
+                },
+            )
+            print_lg("Failed recruiter outreach attempt:", exc)
+        sleep_with_stop(2)
+
+    print_lg("########################################################################################################################\n")
+    buffer(3)
+    return total_runs + 1
+
+
 def _external_submission_detected(provider: str, current_url: str, page_text: str) -> bool:
     url = (current_url or "").lower()
     text = (page_text or "").lower()
@@ -1903,7 +2384,7 @@ def main() -> None:
         print_step("Configuration validated")
         print_step(
             "Runtime config loaded",
-            f"path={BOT_CONFIG_PATH}, search_terms={search_terms}, search_location={search_location}, date={date_posted}, sort={sort_by}",
+            f"path={BOT_CONFIG_PATH}, run_type={run_type}, search_terms={search_terms}, search_location={search_location}, date={date_posted}, sort={sort_by}",
         )
 
         if not default_resume_path:
@@ -1956,8 +2437,14 @@ def main() -> None:
         # Start applying to jobs
         print_step("Bot is ready")
         driver.switch_to.window(linkedIn_tab)
-        total_runs = run(total_runs)
+        if run_type == "outreach":
+            total_runs = run_outreach(total_runs)
+        else:
+            total_runs = run(total_runs)
         while (run_non_stop):
+            if run_type == "outreach":
+                total_runs = run_outreach(total_runs)
+                continue
             if cycle_date_posted:
                 date_options = ["Any time", "Past month",
                                 "Past week", "Past 24 hours"]
@@ -1979,15 +2466,16 @@ def main() -> None:
         critical_error_log("In Applier Main", e)
         pyautogui.alert(e, alert_title)
     finally:
-        summary = "Total runs: {}\nJobs Easy Applied: {}\nExternal job links collected: {}\nTotal applied or collected: {}\nFailed jobs: {}\nIrrelevant jobs skipped: {}\n".format(
-            total_runs, easy_applied_count, external_jobs_count, easy_applied_count + external_jobs_count, failed_count, skip_count)
+        summary = "Total runs: {}\nJobs Easy Applied: {}\nExternal job links collected: {}\nRecruiter outreaches sent: {}\nTotal applied or collected: {}\nFailed jobs: {}\nIrrelevant jobs skipped: {}\n".format(
+            total_runs, easy_applied_count, external_jobs_count, outreach_count, easy_applied_count + external_jobs_count + outreach_count, failed_count, skip_count)
         print_lg(summary)
         print_lg("\n\nTotal runs:                     {}".format(total_runs))
         print_lg("Jobs Easy Applied:              {}".format(easy_applied_count))
         print_lg("External job links collected:   {}".format(external_jobs_count))
+        print_lg("Recruiter outreaches sent:      {}".format(outreach_count))
         print_lg("                              ----------")
         print_lg("Total applied or collected:     {}".format(
-            easy_applied_count + external_jobs_count))
+            easy_applied_count + external_jobs_count + outreach_count))
         print_lg("\nFailed jobs:                    {}".format(failed_count))
         print_lg("Irrelevant jobs skipped:        {}\n".format(skip_count))
         if randomly_answered_questions:

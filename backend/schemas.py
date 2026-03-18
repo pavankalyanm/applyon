@@ -19,6 +19,7 @@ class ConfigPayload(BaseModel):
     search: Optional[Any] = None
     settings: Optional[Any] = None
     resume: Optional[Any] = None
+    outreach: Optional[Any] = None
     other: Optional[Any] = None
 
 
@@ -32,6 +33,7 @@ class ConfigOut(ConfigPayload):
 class RunOut(BaseModel):
     id: int
     status: str
+    run_type: str
     started_at: datetime
     finished_at: Optional[datetime] = None
     error_message: Optional[str] = None
@@ -43,6 +45,11 @@ class RunOut(BaseModel):
 class RunDetail(RunOut):
     log_excerpt: Optional[str] = None
     config_snapshot: Optional[str] = None
+
+
+class RunCreate(BaseModel):
+    run_type: str = "apply"
+    run_input: Optional[Any] = None
 
 
 class JobApplicationOut(BaseModel):
@@ -76,4 +83,44 @@ class JobApplicationUpdate(BaseModel):
 
 class JobsList(BaseModel):
     items: List[JobApplicationOut]
+    total: int
+
+
+class RecruiterContactOut(BaseModel):
+    id: int
+    name: Optional[str] = None
+    headline: Optional[str] = None
+    company: Optional[str] = None
+    location: Optional[str] = None
+    email: Optional[str] = None
+    linkedin_profile_url: str
+
+    class Config:
+        from_attributes = True
+
+
+class OutreachEventOut(BaseModel):
+    id: int
+    run_id: int
+    role: Optional[str] = None
+    company_filter: Optional[str] = None
+    search_context: Optional[str] = None
+    message_input: Optional[str] = None
+    message_sent: Optional[str] = None
+    used_ai: bool = False
+    action_type: str
+    status: str
+    reason: Optional[str] = None
+    recruiter_profile_url: Optional[str] = None
+    recruiter_email: Optional[str] = None
+    sent_at: Optional[datetime] = None
+    created_at: datetime
+    recruiter_contact: Optional[RecruiterContactOut] = None
+
+    class Config:
+        from_attributes = True
+
+
+class OutreachesList(BaseModel):
+    items: List[OutreachEventOut]
     total: int
