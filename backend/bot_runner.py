@@ -54,8 +54,20 @@ def _serialize_run_record(run: models.Run) -> dict:
         "finished_at": _serialize_datetime(run.finished_at),
         "error_message": run.error_message,
         "log_excerpt": run.log_excerpt,
-        "config_snapshot": run.config_snapshot,
+        "config_snapshot": None,
     }
+
+
+def _sanitize_snapshot_for_persistence(snapshot: dict) -> dict:
+    sanitized = json.loads(json.dumps(snapshot))
+    sanitized.pop("context_ai_cache", None)
+    secrets = sanitized.get("secrets")
+    if isinstance(secrets, dict):
+        secrets = dict(secrets)
+        if "llm_api_key" in secrets:
+            secrets["llm_api_key"] = "***redacted***"
+        sanitized["secrets"] = secrets
+    return sanitized
 
 
 def subscribe_run_stream(user_id: int) -> queue.Queue:
@@ -254,6 +266,25 @@ def _build_run_config_snapshot(user_id: int, run_type: str = "apply", run_input:
             if row and row[0]
         ]
 
+        # If context AI is enabled, pre-load cached page contexts for this user
+        use_context_ai = bool(settings.get("use_context_ai", False))
+        context_ai_cache: dict = {}
+        if use_context_ai:
+            page_contexts = (
+                session.query(models.ExternalPageContext)
+                .filter(models.ExternalPageContext.user_id == user_id)
+                .all()
+            )
+            for ctx in page_contexts:
+                cache_key = f"{ctx.domain}:{ctx.page_fingerprint}"
+                context_ai_cache[cache_key] = {
+                    "domain": ctx.domain,
+                    "page_fingerprint": ctx.page_fingerprint,
+                    "dom_snapshot": ctx.dom_snapshot,
+                    "ai_instructions": ctx.ai_instructions,
+                    "times_used": ctx.times_used,
+                }
+
         return {
             "personals": _load_config_section(cfg.personals, "personals"),
             "questions": questions,
@@ -269,6 +300,7 @@ def _build_run_config_snapshot(user_id: int, run_type: str = "apply", run_input:
             },
             "other": _load_optional_config_section(cfg.other, "other"),
             "secrets": secrets,
+            "context_ai_cache": context_ai_cache,
         }
 
 
@@ -305,10 +337,63 @@ def _persist_run_logs(run_id: int, log_lines: list[str]) -> None:
         print(f"[bot_runner] Failed to persist logs for run {run_id}: {exc}", file=sys.stderr)
 
 
+def _coerce_json_payload(value: object) -> object:
+    return json.loads(json.dumps(value))
+
+
+def _persist_page_context_event(user_id: int, ev: dict) -> None:
+    domain = str(ev.get("domain") or "").strip()
+    page_fingerprint = str(ev.get("page_fingerprint") or ev.get("fingerprint") or "").strip()
+    dom_snapshot = ev.get("dom_snapshot")
+    ai_instructions = ev.get("ai_instructions")
+    if not domain or not page_fingerprint or dom_snapshot is None:
+        return
+    if not isinstance(ai_instructions, (list, dict)):
+        return
+
+    try:
+        dom_snapshot = _coerce_json_payload(dom_snapshot)
+        ai_instructions = _coerce_json_payload(ai_instructions)
+    except Exception:
+        return
+
+    now = datetime.utcnow()
+    with db.session_scope() as session:
+        existing = (
+            session.query(models.ExternalPageContext)
+            .filter(
+                models.ExternalPageContext.user_id == user_id,
+                models.ExternalPageContext.domain == domain,
+                models.ExternalPageContext.page_fingerprint == page_fingerprint,
+            )
+            .one_or_none()
+        )
+        if existing is None:
+            ctx = models.ExternalPageContext(
+                user_id=user_id,
+                domain=domain,
+                page_fingerprint=page_fingerprint,
+                dom_snapshot=dom_snapshot,
+                ai_instructions=ai_instructions,
+                times_used=1,
+                last_seen_at=now,
+                created_at=now,
+            )
+            session.add(ctx)
+        else:
+            existing.dom_snapshot = dom_snapshot
+            existing.ai_instructions = ai_instructions
+            existing.times_used = (existing.times_used or 0) + 1
+            existing.last_seen_at = now
+
+
 def _persist_job_event(run_id: int, user_id: int, ev: dict) -> None:
     kind = ev.get("event")
     if kind == "learned_answer":
         _persist_learned_answer_event(user_id, ev)
+        return
+    if kind == "page_context":
+        _persist_page_context_event(user_id, ev)
         return
     if kind == "outreach_settings_update":
         _persist_outreach_settings_update(user_id, ev)
@@ -691,7 +776,7 @@ def _run_worker(run_id: int) -> None:
             snapshot = _build_run_config_snapshot(user.id, run.run_type or "apply", run_input)
             run.status = "running"
             run.started_at = datetime.utcnow()
-            run.config_snapshot = json.dumps(snapshot)
+            run.config_snapshot = json.dumps(_sanitize_snapshot_for_persistence(snapshot))
             session.commit()
         publish_run_snapshot(run_id, "run_started")
 

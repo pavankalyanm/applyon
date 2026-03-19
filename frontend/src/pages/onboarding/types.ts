@@ -85,6 +85,7 @@ export type SettingsConfig = {
   stealth_mode: boolean
   showAiErrorAlerts: boolean
   show_bot_cursor: boolean
+  use_context_ai: boolean
 }
 
 export type ResumeConfig = {
@@ -257,6 +258,7 @@ export const defaultSettings: SettingsConfig = {
   stealth_mode: true,
   showAiErrorAlerts: false,
   show_bot_cursor: true,
+  use_context_ai: false,
 }
 
 export const defaultResume: ResumeConfig = {

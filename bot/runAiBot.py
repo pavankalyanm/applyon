@@ -35,6 +35,14 @@ BOT_STOP_FILE = os.getenv("BOT_STOP_FILE", "")
 BOT_CONFIG_PATH = os.getenv("BOT_CONFIG_PATH", "")
 BOT_DISABLE_DIALOGS = bool(os.getenv("BOT_DISABLE_DIALOGS") or run_in_background)
 
+# Load context AI page-context cache (pre-loaded by backend at run start)
+try:
+    from config._runtime import load_runtime_config as _load_runtime_config
+    _runtime_cfg = _load_runtime_config()
+    _context_ai_cache: dict = _runtime_cfg.get("context_ai_cache") or {}
+except Exception:
+    _context_ai_cache = {}
+
 
 def should_stop() -> bool:
     return bool(BOT_STOP_FILE) and os.path.exists(BOT_STOP_FILE)
@@ -1681,8 +1689,52 @@ def _external_submission_detected(provider: str, current_url: str, page_text: st
     return any(marker in url or marker in text for marker in markers)
 
 
+def _store_external_answers_for_future(adapter, driver, provider: str) -> int:
+    try:
+        form = adapter._find_form(driver)
+    except Exception:
+        form = None
+    if form is None:
+        return 0
+
+    try:
+        answered_fields = adapter._collect_answered_fields(form)
+    except Exception as exc:
+        print_lg(f"Could not capture external answers for storage: {exc}")
+        return 0
+
+    stored = 0
+    seen: set[tuple[str, str]] = set()
+    for item in answered_fields:
+        question = str(item.get("question") or "").strip()
+        question_type = str(item.get("question_type") or "text").strip()
+        answer = str(item.get("answer") or "").strip()
+        options = item.get("options") or []
+        if not question or not answer:
+            continue
+        key = (question.lower(), question_type.lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        emit_job_event(
+            "learned_answer",
+            {
+                "provider": provider,
+                "question": question,
+                "question_type": question_type,
+                "answer": answer,
+                "options": options if isinstance(options, list) else [],
+            },
+        )
+        stored += 1
+    if stored:
+        print_step("Stored external answers", f"{provider} | saved {stored} answers for future applications")
+    return stored
+
+
 def review_external_application(
     provider: str,
+    adapter,
     driver,
     application_link: str,
     unresolved_fields: list[str],
@@ -1704,15 +1756,18 @@ def review_external_application(
         review_lines.append("")
     review_lines.append("The external application is open in your browser.")
     review_lines.append("Review the form, submit it manually, then click the first button below.")
+    review_lines.append("Choose store before submit to save the visible answers for future matching.")
     review_lines.append("Choose skip if you do not want to continue with this application.")
     decision = pyautogui.confirm(
         "\n".join(review_lines),
         f"{provider.title()} review required",
-        ["I will review and submit", "Skip this application"],
+        ["I will review and submit", "Store before submit", "Skip this application"],
     )
-    if decision != "I will review and submit":
+    if decision == "Skip this application":
         print_lg(f"Manual {provider} review skipped for {title} | {company}.")
         return False
+    if decision == "Store before submit":
+        _store_external_answers_for_future(adapter, driver, provider)
 
     print_step("Waiting for manual external review", f"{provider} | {title} | {company}")
     print_lg(
@@ -1847,15 +1902,6 @@ def external_apply(
             reason=None,
         )
 
-        if adapter.provider == "unsupported_external":
-            return ExternalApplyResult(
-                provider=adapter.provider,
-                application_link=application_link,
-                stage="unsupported",
-                unsupported=True,
-                reason="Unsupported external application portal",
-            ), tabs_count
-
         ctx = ExternalApplyContext(
             driver=driver,
             wait=wait,
@@ -1881,6 +1927,12 @@ def external_apply(
                 reason=reason,
             ),
             emit_event=lambda event_name, payload: emit_job_event(event_name, payload),
+            use_context_ai=bool(use_context_ai),
+            page_context_cache=_context_ai_cache,
+            user_profile={
+                "personals": _runtime_cfg.get("personals") or {},
+                "questions": _runtime_cfg.get("questions") or {},
+            },
         )
         result = adapter.run(ctx)
         ensure_not_stopping(f"after filling {adapter.provider} application")
@@ -1907,6 +1959,7 @@ def external_apply(
             print_step("External review required", f"{result.provider} | {title} | {company}")
             if review_external_application(
                 result.provider,
+                adapter,
                 driver,
                 result.application_link,
                 result.unresolved_fields,

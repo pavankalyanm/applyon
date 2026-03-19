@@ -5,7 +5,6 @@ import {
   Chip,
   Dialog,
   DialogContent,
-  FormControl,
   IconButton,
   MenuItem,
   Pagination,

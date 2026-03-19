@@ -96,11 +96,15 @@ export function useSettingsConfig() {
     setSaving(true)
     try {
       const { default_resume_path: _defaultResumePath, ...questionPayload } = questions as QuestionsConfig & { default_resume_path?: string }
+      const sanitizedSettings = {
+        ...settings,
+        use_context_ai: Boolean(secrets.use_AI) && Boolean(settings.use_context_ai),
+      }
       await api.put('/config', {
         personals,
         questions: questionPayload,
         search,
-        settings: { ...settings, secrets },
+        settings: { ...sanitizedSettings, secrets },
         outreach,
       })
     } finally {

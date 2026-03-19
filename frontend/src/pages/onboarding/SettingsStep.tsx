@@ -5,9 +5,10 @@ import { parseNumber } from './types'
 type Props = {
   value: SettingsConfig
   onChange: (next: SettingsConfig) => void
+  aiEnabled?: boolean
 }
 
-export function SettingsStep({ value, onChange }: Props) {
+export function SettingsStep({ value, onChange, aiEnabled = true }: Props) {
   function update<K extends keyof SettingsConfig>(key: K, v: SettingsConfig[K]) {
     onChange({ ...value, [key]: v })
   }
@@ -171,7 +172,22 @@ export function SettingsStep({ value, onChange }: Props) {
           }
           label="Show a visual bot cursor for clicks, scrolling, and typing"
         />
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={value.use_context_ai}
+              disabled={!aiEnabled}
+              onChange={(e) => update('use_context_ai', e.target.checked)}
+            />
+          }
+          label="Context AI Engine — use AI to fill any external application form, including unsupported portals. Learns and caches each new page layout."
+        />
       </FormGroup>
+      {!aiEnabled ? (
+        <Typography color="warning.main" fontSize="0.9rem">
+          Enable AI and configure a provider in the Secrets step before turning on Context AI.
+        </Typography>
+      ) : null}
     </Stack>
   )
 }

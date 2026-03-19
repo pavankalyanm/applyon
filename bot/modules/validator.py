@@ -220,6 +220,7 @@ def validate_settings() -> None | ValueError | TypeError:
     check_boolean(keep_screen_awake, "keep_screen_awake")
     check_boolean(stealth_mode, "stealth_mode")
     check_boolean(show_bot_cursor, "show_bot_cursor")
+    check_boolean(use_context_ai, "use_context_ai")
 
 
 def validate_outreach() -> None | ValueError | TypeError:

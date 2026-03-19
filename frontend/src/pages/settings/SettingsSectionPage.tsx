@@ -25,7 +25,13 @@ export function SettingsSectionPage({ section }: Props) {
     case 'questions':
       return <QuestionsStep value={ctx.questions} onChange={ctx.setQuestions} />
     case 'settings':
-      return <SettingsStep value={ctx.settings} onChange={ctx.setSettings} />
+      return (
+        <SettingsStep
+          value={ctx.settings}
+          onChange={ctx.setSettings}
+          aiEnabled={Boolean(ctx.secrets.use_AI)}
+        />
+      )
     case 'resume':
       return <ResumeStep value={ctx.resume} onChange={ctx.setResume} />
     case 'outreach':

@@ -106,11 +106,15 @@ export function OnboardingWizard() {
     setSaving(true)
     try {
       const { default_resume_path: _defaultResumePath, ...questionPayload } = questions as QuestionsConfig & { default_resume_path?: string }
+      const sanitizedSettings = {
+        ...settings,
+        use_context_ai: Boolean(secrets.use_AI) && Boolean(settings.use_context_ai),
+      }
       await api.put('/config', {
         personals,
         questions: questionPayload,
         search,
-        settings: { ...settings, secrets },
+        settings: { ...sanitizedSettings, secrets },
         outreach,
       })
     } finally {
@@ -187,7 +191,13 @@ export function OnboardingWizard() {
             {activeStep === 0 && <PersonalsStep value={personals} onChange={setPersonals} />}
             {activeStep === 1 && <SearchStep value={search} onChange={setSearch} />}
             {activeStep === 2 && <QuestionsStep value={questions} onChange={setQuestions} />}
-            {activeStep === 3 && <SettingsStep value={settings} onChange={setSettings} />}
+            {activeStep === 3 && (
+              <SettingsStep
+                value={settings}
+                onChange={setSettings}
+                aiEnabled={Boolean(secrets.use_AI)}
+              />
+            )}
             {activeStep === 4 && <ResumeStep value={resume} onChange={setResume} />}
             {activeStep === 5 && <OutreachStep value={outreach} onChange={setOutreach} />}
             {activeStep === 6 && <SecretsStep value={secrets} onChange={setSecrets} />}

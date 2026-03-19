@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from .db import Base
@@ -23,6 +23,7 @@ class User(Base):
     resumes = relationship("Resume", back_populates="user")
     recruiter_contacts = relationship("RecruiterContact", back_populates="user")
     outreach_events = relationship("OutreachEvent", back_populates="user")
+    external_page_contexts = relationship("ExternalPageContext", back_populates="user")
 
 
 class Config(Base):
@@ -182,3 +183,21 @@ class OutreachEvent(Base):
     user = relationship("User", back_populates="outreach_events")
     run = relationship("Run", back_populates="outreach_events")
     recruiter_contact = relationship("RecruiterContact", back_populates="outreach_events")
+
+
+class ExternalPageContext(Base):
+    __tablename__ = "external_page_contexts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    domain = Column(String(255), nullable=False)
+    page_fingerprint = Column(String(64), nullable=False)
+    dom_snapshot = Column(JSON, nullable=False)
+    ai_instructions = Column(JSON, nullable=False)
+    times_used = Column(Integer, default=0, nullable=False)
+    last_seen_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (UniqueConstraint("user_id", "domain", "page_fingerprint"),)
+
+    user = relationship("User", back_populates="external_page_contexts")

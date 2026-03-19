@@ -21,7 +21,7 @@ import {
   Typography,
 } from '@mui/material'
 import { OpenInNew, Refresh, TableRows, ViewKanban } from '@mui/icons-material'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api'
 
 type PipelineStatus = 'applied' | 'assessment' | 'interview' | 'rejected'
@@ -73,6 +73,7 @@ const pipelineLabels: Record<PipelineStatus, string> = {
 const pipelineAccentColors: Record<PipelineStatus, string> = {
   applied: '#0ea5e9', assessment: '#f59e0b', interview: '#16a34a', rejected: '#ef4444',
 }
+const failedAccentColor = '#b91c1c'
 
 function providerLabel(provider?: string | null) {
   const map: Record<string, string> = {
@@ -84,6 +85,12 @@ function providerLabel(provider?: string | null) {
     external: 'External',
   }
   return map[provider ?? ''] ?? 'Unknown'
+}
+
+function matchesPipelineBucket(job: JobApplication, status: PipelineStatus) {
+  if (job.pipeline_status !== status) return false
+  if (status === 'rejected' && job.status === 'failed') return false
+  return true
 }
 
 export function JobsDashboard() {
@@ -125,10 +132,18 @@ export function JobsDashboard() {
 
   useEffect(() => { loadJobs() }, [search, pipelineFilter, botStatusFilter, providerFilter])
 
+  const visibleJobs = useMemo(() => {
+    if (pipelineFilter === 'rejected' && botStatusFilter === 'all') {
+      return jobs.filter((job) => job.status !== 'failed')
+    }
+    return jobs
+  }, [jobs, pipelineFilter, botStatusFilter])
+
   const counts = pipelineStatuses.reduce<Record<PipelineStatus, number>>(
-    (acc, s) => { acc[s] = jobs.filter((j) => j.pipeline_status === s).length; return acc },
+    (acc, s) => { acc[s] = jobs.filter((j) => matchesPipelineBucket(j, s)).length; return acc },
     { applied: 0, assessment: 0, interview: 0, rejected: 0 },
   )
+  const failedCount = jobs.filter((job) => job.status === 'failed').length
 
   return (
     <Box sx={{ p: { xs: 3, md: 4 }, minHeight: '100%' }}>
@@ -162,7 +177,7 @@ export function JobsDashboard() {
       <Box
         sx={{
           display: 'grid',
-          gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(4, 1fr)' },
+          gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(5, 1fr)' },
           gap: 2,
           mb: 3,
         }}
@@ -172,7 +187,6 @@ export function JobsDashboard() {
             key={s}
             sx={{
               p: 3,
-              bgcolor: '#fff',
               border: '1px solid #e2e8f0',
               borderLeft: `4px solid ${pipelineAccentColors[s]}`,
               borderRadius: '5px',
@@ -199,6 +213,34 @@ export function JobsDashboard() {
             </Typography>
           </Box>
         ))}
+        <Box
+          sx={{
+            p: 3,
+            border: '1px solid #e2e8f0',
+            borderLeft: `4px solid ${failedAccentColor}`,
+            borderRadius: '5px',
+            cursor: 'pointer',
+            transition: 'background 0.12s',
+            bgcolor: botStatusFilter === 'failed' ? '#fef2f2' : '#fff',
+            '&:hover': { bgcolor: '#fef2f2' },
+          }}
+          onClick={() => setBotStatusFilter((prev) => (prev === 'failed' ? 'all' : 'failed'))}
+        >
+          <Typography
+            sx={{
+              fontSize: '2rem',
+              fontWeight: 800,
+              color: failedAccentColor,
+              lineHeight: 1,
+              mb: 0.5,
+            }}
+          >
+            {failedCount}
+          </Typography>
+          <Typography sx={{ color: '#64748b', fontSize: '0.82rem', fontWeight: 500 }}>
+            Failed
+          </Typography>
+        </Box>
       </Box>
 
       {/* ── Filters row ── */}
@@ -297,7 +339,7 @@ export function JobsDashboard() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {jobs.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((job) => (
+              {visibleJobs.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((job) => (
                 <TableRow key={job.id} hover sx={{ '&:hover': { bgcolor: '#f8fdf9' }, '&:last-child td': { borderBottom: 0 } }}>
                   {/* Job */}
                   <TableCell sx={{ minWidth: 260, py: 2 }}>
@@ -419,7 +461,7 @@ export function JobsDashboard() {
                   </TableCell>
                 </TableRow>
               ))}
-              {jobs.length === 0 && (
+              {visibleJobs.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={7} sx={{ py: 6, textAlign: 'center', color: '#64748b' }}>
                     No jobs matched the current filters.
@@ -430,7 +472,7 @@ export function JobsDashboard() {
           </Table>
           <TablePagination
             component="div"
-            count={jobs.length}
+            count={visibleJobs.length}
             page={page}
             onPageChange={(_, p) => setPage(p)}
             rowsPerPage={rowsPerPage}
@@ -447,7 +489,7 @@ export function JobsDashboard() {
           }}
         >
           {pipelineStatuses.map((status) => {
-            const columnJobs = jobs.filter((j) => j.pipeline_status === status)
+            const columnJobs = visibleJobs.filter((j) => matchesPipelineBucket(j, status))
             return (
               <Box
                 key={status}

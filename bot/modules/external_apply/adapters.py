@@ -12,6 +12,7 @@ from selenium.webdriver.remote.webelement import WebElement
 
 from modules.helpers import buffer, print_lg, print_step, show_confirm
 from modules.visual_cursor import ensure_visual_cursor, show_cursor_click, show_cursor_scroll, show_cursor_typing
+from modules.external_apply.context_ai_engine import ContextAIEngine
 from modules.external_apply.answer_engine import (
     coerce_text_value,
     is_resume_upload_label,
@@ -40,6 +41,9 @@ class ExternalApplyContext:
     click_gap: int
     progress: ProgressCallback
     emit_event: EventCallback | None = None
+    use_context_ai: bool = False
+    page_context_cache: dict = field(default_factory=dict)
+    user_profile: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -157,6 +161,91 @@ class BaseExternalApplyAdapter:
     def run(self, ctx: ExternalApplyContext) -> ExternalApplyResult:
         driver = ctx.driver
         self.open_or_attach_context(driver)
+
+        # ── Context AI Engine ──────────────────────────────────────────────
+        if ctx.use_context_ai:
+            engine = ContextAIEngine()
+
+            # Auth detection (always first)
+            requires_auth, auth_reason = engine.check_requires_auth(driver)
+            if requires_auth:
+                print_lg(f"[ContextAI] Auth page detected: {auth_reason}")
+                return ExternalApplyResult(
+                    provider=self.provider,
+                    application_link=driver.current_url,
+                    stage="skipped",
+                    skipped=True,
+                    reason=auth_reason,
+                )
+
+            try:
+                snapshot = engine.extract_dom_snapshot(driver)
+                fingerprint = engine.compute_fingerprint(snapshot)
+                cache_key = f"{snapshot['domain']}:{fingerprint}"
+                cached = ctx.page_context_cache.get(cache_key)
+
+                if cached:
+                    print_step("Context AI", f"cache hit for {snapshot['domain']} ({fingerprint}) — skipping AI call")
+                    instructions = cached["ai_instructions"]
+                    used_cache = True
+                    if ctx.emit_event:
+                        ctx.emit_event("page_context", {
+                            "event": "page_context",
+                            "domain": snapshot["domain"],
+                            "fingerprint": fingerprint,
+                            "dom_snapshot": cached.get("dom_snapshot") or snapshot,
+                            "ai_instructions": instructions,
+                        })
+                else:
+                    print_step("Context AI", f"new layout on {snapshot['domain']} ({fingerprint}) — calling AI")
+                    instructions = engine.get_ai_instructions(
+                        snapshot, ctx.user_profile, ctx.ai_client
+                    )
+                    used_cache = False
+
+                    if instructions and ctx.emit_event:
+                        ctx.emit_event("page_context", {
+                            "event": "page_context",
+                            "domain": snapshot["domain"],
+                            "fingerprint": fingerprint,
+                            "dom_snapshot": snapshot,
+                            "ai_instructions": [i for i in instructions if not i.get("__requires_auth")],
+                        })
+
+                if instructions:
+                    ai_result = engine.execute_instructions(driver, instructions)
+                    if ai_result.requires_auth:
+                        return ExternalApplyResult(
+                            provider=self.provider,
+                            application_link=driver.current_url,
+                            stage="skipped",
+                            skipped=True,
+                            reason=ai_result.skip_reason,
+                        )
+                    print_step(
+                        "Context AI result",
+                        f"filled={ai_result.filled_count}  skipped={ai_result.skipped_count}  "
+                        f"failed={len(ai_result.failed_fields)}  cached={'yes' if used_cache else 'no'}"
+                    )
+            except Exception as exc:
+                print_lg(f"[ContextAI] Engine error — falling through to standard logic: {exc}")
+        elif self.provider != "unsupported_external":
+            # Auth check even without context AI — no point waiting on a login page
+            try:
+                engine = ContextAIEngine()
+                requires_auth, auth_reason = engine.check_requires_auth(driver)
+                if requires_auth:
+                    print_lg(f"[AuthCheck] Auth page detected: {auth_reason}")
+                    return ExternalApplyResult(
+                        provider=self.provider,
+                        application_link=driver.current_url,
+                        stage="skipped",
+                        skipped=True,
+                        reason=auth_reason,
+                    )
+            except Exception:
+                pass
+        # ── End Context AI ─────────────────────────────────────────────────
         form = self._find_form(driver)
         if form is None:
             diagnostics = self._application_diagnostics(driver)
@@ -1164,13 +1253,30 @@ class UnsupportedExternalAdapter(BaseExternalApplyAdapter):
         return True
 
     def run(self, ctx: ExternalApplyContext) -> ExternalApplyResult:
-        return ExternalApplyResult(
-            provider=self.provider,
-            application_link=ctx.driver.current_url,
-            stage="unsupported",
-            unsupported=True,
-            reason="Unsupported external application portal. Supported URLs must contain greenhouse, lever, or ashbyhq.",
-        )
+        driver = ctx.driver
+        engine = ContextAIEngine()
+
+        # Always check for auth — no point waiting on a login page
+        try:
+            requires_auth, auth_reason = engine.check_requires_auth(driver)
+            if requires_auth:
+                print_lg(f"[AuthCheck] Unsupported portal auth page: {auth_reason}")
+                return ExternalApplyResult(
+                    provider=self.provider,
+                    application_link=driver.current_url,
+                    stage="skipped",
+                    skipped=True,
+                    reason=auth_reason,
+                )
+        except Exception:
+            pass
+
+        result = super().run(ctx)
+        if result.stage == "failed" and not result.review_required and not result.filled_fields:
+            result.stage = "unsupported"
+            result.unsupported = True
+            result.reason = result.reason or "The bot could not automate this unsupported external portal."
+        return result
 
 
 ADAPTERS = [GreenhouseAdapter(), LeverAdapter(), AshbyAdapter()]
