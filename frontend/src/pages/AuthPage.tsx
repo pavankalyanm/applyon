@@ -112,7 +112,7 @@ export function AuthPage() {
           <Box
             sx={{
               bgcolor: '#fff',
-              borderRadius: 4,
+              borderRadius: '5px',
               border: '1px solid #e2e8f0',
               boxShadow: '0 4px 24px rgba(0,0,0,0.04)',
               p: { xs: 3, sm: 4 },
@@ -139,12 +139,12 @@ export function AuthPage() {
                 variant="fullWidth"
                 sx={{
                   bgcolor: '#f1f5f9',
-                  borderRadius: 2,
+                  borderRadius: '5px',
                   p: 0.5,
                   minHeight: 44,
                   '& .MuiTab-root': {
                     minHeight: 38,
-                    borderRadius: 1.5,
+                    borderRadius: '5px',
                     zIndex: 1,
                   },
                   '& .Mui-selected': {

@@ -1,13 +1,42 @@
-from fastapi import APIRouter, Depends, HTTPException
+import asyncio
+import json
+import queue
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from datetime import datetime
 
 from . import db, models, schemas
-from .auth import get_current_user
+from .auth import get_current_user, get_current_user_from_token
 from . import bot_runner
 
 
 router = APIRouter(prefix="/runs", tags=["runs"])
+
+
+@router.get("/stream")
+async def stream_runs(
+    token: str = Query(...),
+    session: Session = Depends(db.get_session),
+):
+    current_user = get_current_user_from_token(token, session)
+    initial_runs = bot_runner.get_serialized_runs_for_user(current_user.id)
+    subscriber = bot_runner.subscribe_run_stream(current_user.id)
+
+    async def event_generator():
+        try:
+            yield f"data: {json.dumps({'type': 'runs_snapshot', 'runs': initial_runs})}\n\n"
+            while True:
+                try:
+                    payload = await asyncio.to_thread(subscriber.get, True, 15.0)
+                    yield f"data: {json.dumps(payload)}\n\n"
+                except queue.Empty:
+                    yield "event: ping\ndata: {}\n\n"
+        finally:
+            bot_runner.unsubscribe_run_stream(current_user.id, subscriber)
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 @router.get("", response_model=list[schemas.RunOut])
@@ -56,6 +85,7 @@ def create_run(
 
     # Start the bot asynchronously
     bot_runner.start_run(run.id)
+    bot_runner.publish_run_snapshot(run.id, "run_created")
 
     return run
 

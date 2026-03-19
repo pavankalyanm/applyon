@@ -57,11 +57,7 @@ def create_access_token(*, user_id: int, email: str, expires_minutes: int | None
     return jwt.encode(payload, _jwt_secret(), algorithm=_jwt_alg())
 
 
-def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    session: Session = Depends(db.get_session),
-) -> models.User:
-    token = credentials.credentials
+def get_current_user_from_token(token: str, session: Session) -> models.User:
     try:
         payload = jwt.decode(token, _jwt_secret(), algorithms=[_jwt_alg()])
         user_id = int(payload.get("sub"))
@@ -73,3 +69,9 @@ def get_current_user(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
     return user
 
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    session: Session = Depends(db.get_session),
+) -> models.User:
+    return get_current_user_from_token(credentials.credentials, session)

@@ -1,15 +1,5 @@
-import {
-  Box,
-  Button,
-  Container,
-  Divider,
-  List,
-  ListItemButton,
-  ListItemText,
-  Stack,
-  Typography,
-} from '@mui/material'
-import { ArrowBack, CheckCircle, RocketLaunch, Save } from '@mui/icons-material'
+import { Box, Button, Stack, Tab, Tabs, Typography } from '@mui/material'
+import { CheckCircle, Save } from '@mui/icons-material'
 import { useNavigate, useLocation, Outlet, useOutletContext } from 'react-router-dom'
 import { useSettingsConfig } from './useSettingsConfig'
 import type {
@@ -24,12 +14,12 @@ import type {
 
 const sections = [
   { key: 'personals', label: 'Personals' },
-  { key: 'search', label: 'Search' },
+  { key: 'search',    label: 'Search' },
   { key: 'questions', label: 'Questions' },
-  { key: 'settings', label: 'Settings' },
-  { key: 'resume', label: 'Resume' },
-  { key: 'outreach', label: 'Outreach' },
-  { key: 'secrets', label: 'Secrets' },
+  { key: 'settings',  label: 'Settings' },
+  { key: 'resume',    label: 'Resume' },
+  { key: 'outreach',  label: 'Outreach' },
+  { key: 'secrets',   label: 'Secrets' },
 ] as const
 
 export type SettingsOutletContext = {
@@ -58,148 +48,130 @@ export function SettingsLayout() {
   const location = useLocation()
   const cfg = useSettingsConfig()
 
+  const activeSection = sections.find((s) => location.pathname.endsWith(`/${s.key}`))?.key ?? 'personals'
+
   return (
-    <Box sx={{ minHeight: '100dvh', bgcolor: '#f8faf9' }}>
+    <Box sx={{ minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
+      {/* ── Page header ── */}
       <Box
         sx={{
-          borderBottom: '1px solid #e2e8f0',
-          bgcolor: 'rgba(255,255,255,0.9)',
-          backdropFilter: 'blur(8px)',
+          px: { xs: 3, md: 4 },
+          pt: 4,
+          pb: 0,
+          bgcolor: 'transparent',
         }}
       >
-        <Container maxWidth="lg">
-          <Stack direction="row" alignItems="center" spacing={1.5} sx={{ py: 2 }}>
-            <RocketLaunch sx={{ color: '#16a34a', fontSize: 24 }} />
-            <Typography sx={{ fontWeight: 800, color: '#14532d', fontSize: '1rem' }}>
-              AutoApply
-            </Typography>
-            <Box sx={{ flexGrow: 1 }} />
-            <Button
-              size="small"
-              startIcon={<ArrowBack />}
-              onClick={() => navigate('/dashboard')}
-              sx={{ color: '#64748b' }}
-            >
-              Back to dashboard
-            </Button>
-          </Stack>
-        </Container>
-      </Box>
-
-      <Container maxWidth="lg" sx={{ py: { xs: 4, md: 6 } }}>
-        <Stack spacing={4} className="fade-in">
+        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 3 }}>
           <Box>
-            <Typography variant="h4" sx={{ mb: 1, color: '#0f172a' }}>
+            <Typography
+              variant="h4"
+              sx={{ color: '#0f172a', fontWeight: 800, letterSpacing: '-0.02em' }}
+            >
               Settings
             </Typography>
-            <Typography color="text.secondary">
-              Manage all configuration for your AutoApply bot. Values are loaded from your database config.
+            <Typography color="text.secondary" sx={{ mt: 0.5, fontSize: '0.9rem' }}>
+              Manage all configuration for your AutoApply bot.
             </Typography>
           </Box>
 
-          <Box
-            sx={{
-              display: 'grid',
-              gridTemplateColumns: { xs: '1fr', md: '260px 1fr' },
-              gap: 3,
-              alignItems: 'flex-start',
-            }}
-          >
-            <Box
+          {/* Save buttons */}
+          <Stack direction="row" spacing={1.5} alignItems="center">
+            <Button
+              variant="outlined"
+              startIcon={<Save sx={{ fontSize: 16 }} />}
+              disabled={cfg.saving || !cfg.canSave || cfg.loading}
+              onClick={cfg.saveAll}
+              size="small"
               sx={{
-                bgcolor: '#fff',
-                borderRadius: 3,
-                border: '1px solid #e2e8f0',
-                p: 2,
+                borderColor: '#d1d5db',
+                color: '#374151',
+                '&:hover': { borderColor: '#16a34a', color: '#16a34a', bgcolor: 'transparent' },
               }}
             >
-              <Typography
-                variant="subtitle2"
-                sx={{ px: 1.5, py: 1, color: '#64748b', textTransform: 'uppercase', fontSize: 11 }}
-              >
-                Sections
-              </Typography>
-              <Divider />
-              <List dense>
-                {sections.map((section) => {
-                  const selected = location.pathname.endsWith(`/${section.key}`)
-                  return (
-                    <ListItemButton
-                      key={section.key}
-                      selected={selected}
-                      onClick={() => navigate(`/settings/${section.key}`)}
-                      sx={{
-                        borderRadius: 2,
-                        my: 0.25,
-                        '&.Mui-selected': {
-                          bgcolor: '#ecfdf3',
-                          '&:hover': { bgcolor: '#dcfce7' },
-                        },
-                      }}
-                    >
-                      <ListItemText
-                        primary={section.label}
-                        primaryTypographyProps={{ fontSize: 14, fontWeight: selected ? 600 : 500 }}
-                      />
-                    </ListItemButton>
-                  )
-                })}
-              </List>
-            </Box>
-
-            <Stack
-              spacing={3}
-              sx={{
-                bgcolor: '#fff',
-                borderRadius: 3,
-                border: '1px solid #e2e8f0',
-                p: { xs: 3, md: 4 },
+              {cfg.saving ? 'Saving…' : 'Save'}
+            </Button>
+            <Button
+              variant="contained"
+              startIcon={<CheckCircle sx={{ fontSize: 16 }} />}
+              disabled={cfg.saving || !cfg.canSave || cfg.loading}
+              onClick={async () => {
+                await cfg.saveAll()
+                navigate('/dashboard')
               }}
+              size="small"
             >
-              <Outlet
-                context={{
-                  personals: cfg.personals,
-                  setPersonals: cfg.setPersonals,
-                  questions: cfg.questions,
-                  setQuestions: cfg.setQuestions,
-                  search: cfg.search,
-                  setSearch: cfg.setSearch,
-                  settings: cfg.settings,
-                  setSettings: cfg.setSettings,
-                  resume: cfg.resume,
-                  setResume: cfg.setResume,
-                  outreach: cfg.outreach,
-                  setOutreach: cfg.setOutreach,
-                  secrets: cfg.secrets,
-                  setSecrets: cfg.setSecrets,
-                }}
-              />
-
-              <Stack direction="row" justifyContent="flex-end" spacing={1.5}>
-                <Button
-                  variant="outlined"
-                  startIcon={<Save />}
-                  disabled={cfg.saving || !cfg.canSave || cfg.loading}
-                  onClick={cfg.saveAll}
-                >
-                  {cfg.saving ? 'Saving…' : 'Save changes'}
-                </Button>
-                <Button
-                  variant="contained"
-                  startIcon={<CheckCircle />}
-                  disabled={cfg.saving || !cfg.canSave || cfg.loading}
-                  onClick={async () => {
-                    await cfg.saveAll()
-                    navigate('/dashboard')
-                  }}
-                >
-                  Save & close
-                </Button>
-              </Stack>
-            </Stack>
-          </Box>
+              Save & close
+            </Button>
+          </Stack>
         </Stack>
-      </Container>
+
+        {/* ── Horizontal tab bar ── */}
+        <Tabs
+          value={activeSection}
+          onChange={(_, val) => navigate(`/settings/${val}`)}
+          variant="scrollable"
+          scrollButtons="auto"
+          TabIndicatorProps={{
+            style: {
+              backgroundColor: '#16a34a',
+              height: 2,
+            },
+          }}
+          sx={{
+            borderBottom: '2px solid #e2e8f0',
+            minHeight: 42,
+            '& .MuiTab-root': {
+              minHeight: 42,
+              fontSize: '0.82rem',
+              fontWeight: 500,
+              textTransform: 'none',
+              px: 2.5,
+              py: 0,
+              color: '#64748b',
+              '&.Mui-selected': {
+                color: '#16a34a',
+                fontWeight: 700,
+              },
+            },
+          }}
+        >
+          {sections.map((s) => (
+            <Tab key={s.key} label={s.label} value={s.key} disableRipple />
+          ))}
+        </Tabs>
+      </Box>
+
+      {/* ── Section content ── */}
+      <Box
+        sx={{
+          flex: 1,
+          mx: { xs: 3, md: 4 },
+          mt: 3,
+          mb: 4,
+          p: { xs: 3, md: 4 },
+          bgcolor: '#fff',
+          border: '1px solid #e2e8f0',
+        }}
+      >
+        <Outlet
+          context={{
+            personals: cfg.personals,
+            setPersonals: cfg.setPersonals,
+            questions: cfg.questions,
+            setQuestions: cfg.setQuestions,
+            search: cfg.search,
+            setSearch: cfg.setSearch,
+            settings: cfg.settings,
+            setSettings: cfg.setSettings,
+            resume: cfg.resume,
+            setResume: cfg.setResume,
+            outreach: cfg.outreach,
+            setOutreach: cfg.setOutreach,
+            secrets: cfg.secrets,
+            setSecrets: cfg.setSecrets,
+          }}
+        />
+      </Box>
     </Box>
   )
 }

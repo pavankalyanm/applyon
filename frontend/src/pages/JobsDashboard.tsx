@@ -1,9 +1,7 @@
 import {
-  AppBar,
   Box,
   Button,
   Chip,
-  Container,
   FormControl,
   InputLabel,
   MenuItem,
@@ -20,19 +18,10 @@ import {
   TextField,
   ToggleButton,
   ToggleButtonGroup,
-  Toolbar,
   Typography,
 } from '@mui/material'
-import {
-  ArrowBack,
-  OpenInNew,
-  Refresh,
-  RocketLaunch,
-  TableRows,
-  ViewKanban,
-} from '@mui/icons-material'
+import { OpenInNew, Refresh, TableRows, ViewKanban } from '@mui/icons-material'
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
 
 type PipelineStatus = 'applied' | 'assessment' | 'interview' | 'rejected'
@@ -66,7 +55,8 @@ type JobApplication = {
 }
 
 const pipelineStatuses: PipelineStatus[] = ['applied', 'assessment', 'interview', 'rejected']
-const providerOptions: { value: string; label: string }[] = [
+
+const providerOptions = [
   { value: 'all', label: 'All providers' },
   { value: 'linkedin_easy_apply', label: 'LinkedIn Easy Apply' },
   { value: 'greenhouse', label: 'Greenhouse' },
@@ -77,21 +67,26 @@ const providerOptions: { value: string; label: string }[] = [
 ]
 
 const pipelineLabels: Record<PipelineStatus, string> = {
-  applied: 'Applied',
-  assessment: 'Assessment',
-  interview: 'Interview',
-  rejected: 'Rejected',
+  applied: 'Applied', assessment: 'Assessment', interview: 'Interview', rejected: 'Rejected',
 }
 
-const pipelineColors: Record<PipelineStatus, 'primary' | 'warning' | 'success' | 'error'> = {
-  applied: 'primary',
-  assessment: 'warning',
-  interview: 'success',
-  rejected: 'error',
+const pipelineAccentColors: Record<PipelineStatus, string> = {
+  applied: '#0ea5e9', assessment: '#f59e0b', interview: '#16a34a', rejected: '#ef4444',
+}
+
+function providerLabel(provider?: string | null) {
+  const map: Record<string, string> = {
+    linkedin_easy_apply: 'LinkedIn Easy Apply',
+    greenhouse: 'Greenhouse',
+    lever: 'Lever',
+    ashby: 'Ashby',
+    unsupported_external: 'Unsupported external',
+    external: 'External',
+  }
+  return map[provider ?? ''] ?? 'Unknown'
 }
 
 export function JobsDashboard() {
-  const navigate = useNavigate()
   const [jobs, setJobs] = useState<JobApplication[]>([])
   const [page, setPage] = useState(0)
   const rowsPerPage = 25
@@ -128,417 +123,469 @@ export function JobsDashboard() {
     )
   }
 
-  useEffect(() => {
-    loadJobs()
-  }, [search, pipelineFilter, botStatusFilter, providerFilter])
-
-  function providerLabel(provider?: string | null) {
-    switch (provider) {
-      case 'linkedin_easy_apply':
-        return 'LinkedIn Easy Apply'
-      case 'greenhouse':
-        return 'Greenhouse'
-      case 'lever':
-        return 'Lever'
-      case 'ashby':
-        return 'Ashby'
-      case 'unsupported_external':
-        return 'Unsupported external'
-      case 'external':
-        return 'External'
-      default:
-        return 'Unknown provider'
-    }
-  }
+  useEffect(() => { loadJobs() }, [search, pipelineFilter, botStatusFilter, providerFilter])
 
   const counts = pipelineStatuses.reduce<Record<PipelineStatus, number>>(
-    (acc, status) => {
-      acc[status] = jobs.filter((job) => job.pipeline_status === status).length
-      return acc
-    },
+    (acc, s) => { acc[s] = jobs.filter((j) => j.pipeline_status === s).length; return acc },
     { applied: 0, assessment: 0, interview: 0, rejected: 0 },
   )
 
   return (
-    <Box sx={{ minHeight: '100dvh', bgcolor: '#f8faf9' }}>
-      <AppBar
-        position="sticky"
-        elevation={0}
+    <Box sx={{ p: { xs: 3, md: 4 }, minHeight: '100%' }}>
+      {/* ── Page header ── */}
+      <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 4 }}>
+        <Box>
+          <Typography variant="h4" sx={{ color: '#0f172a', fontWeight: 800, letterSpacing: '-0.02em' }}>
+            Jobs
+          </Typography>
+          <Typography color="text.secondary" sx={{ mt: 0.5, fontSize: '0.9rem' }}>
+            Track every application, update pipeline status, and jump to the original listing.
+          </Typography>
+        </Box>
+        <Button
+          variant="outlined"
+          startIcon={<Refresh sx={{ fontSize: 16 }} />}
+          onClick={loadJobs}
+          disabled={loading}
+          size="small"
+          sx={{
+            borderColor: '#d1d5db',
+            color: '#374151',
+            '&:hover': { borderColor: '#16a34a', color: '#16a34a', bgcolor: 'transparent' },
+          }}
+        >
+          {loading ? 'Refreshing…' : 'Refresh'}
+        </Button>
+      </Stack>
+
+      {/* ── Pipeline stat cards ── */}
+      <Box
         sx={{
-          background: 'rgba(255,255,255,0.9)',
-          backdropFilter: 'blur(12px)',
-          borderBottom: '1px solid #e2e8f0',
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(4, 1fr)' },
+          gap: 2,
+          mb: 3,
         }}
       >
-        <Toolbar sx={{ maxWidth: 1280, width: '100%', mx: 'auto' }}>
-          <Stack direction="row" alignItems="center" spacing={1} sx={{ flexGrow: 1 }}>
-            <RocketLaunch sx={{ color: '#16a34a', fontSize: 26 }} />
-            <Typography sx={{ fontWeight: 800, color: '#14532d', fontSize: '1.05rem' }}>
-              AutoApply
-            </Typography>
-          </Stack>
-          <Button startIcon={<ArrowBack />} onClick={() => navigate('/dashboard')} sx={{ color: '#64748b' }}>
-            Back to dashboard
-          </Button>
-        </Toolbar>
-      </AppBar>
-
-      <Container maxWidth="xl" sx={{ py: { xs: 3, md: 5 } }}>
-        <Stack spacing={4} className="fade-in">
-          <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" spacing={2}>
-            <Box>
-              <Typography variant="h4" sx={{ color: '#0f172a' }}>
-                Jobs Dashboard
-              </Typography>
-              <Typography color="text.secondary">
-                Track every job, maintain its current status, and jump back to the original listing.
-              </Typography>
-            </Box>
-            <Button
-              variant="contained"
-              startIcon={<Refresh sx={{ fontSize: 18 }} />}
-              onClick={loadJobs}
-              disabled={loading}
-              sx={{ alignSelf: 'flex-start' }}
-            >
-              {loading ? 'Refreshing...' : 'Refresh'}
-            </Button>
-          </Stack>
-
-          <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
-            <TextField
-              fullWidth
-              label="Search jobs"
-              placeholder="Search by title, company, location, or job ID"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-            />
-            <FormControl sx={{ minWidth: 180 }}>
-              <InputLabel id="pipeline-filter-label">Pipeline status</InputLabel>
-              <Select
-                labelId="pipeline-filter-label"
-                value={pipelineFilter}
-                label="Pipeline status"
-                onChange={(event) => setPipelineFilter(event.target.value)}
-              >
-                <MenuItem value="all">All statuses</MenuItem>
-                {pipelineStatuses.map((status) => (
-                  <MenuItem key={status} value={status}>
-                    {pipelineLabels[status]}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            <FormControl sx={{ minWidth: 180 }}>
-              <InputLabel id="bot-filter-label">Run result</InputLabel>
-              <Select
-                labelId="bot-filter-label"
-                value={botStatusFilter}
-                label="Run result"
-                onChange={(event) => setBotStatusFilter(event.target.value)}
-              >
-                <MenuItem value="all">All results</MenuItem>
-                <MenuItem value="applied">Applied</MenuItem>
-                <MenuItem value="failed">Failed</MenuItem>
-              </Select>
-            </FormControl>
-            <FormControl sx={{ minWidth: 210 }}>
-              <InputLabel id="provider-filter-label">Provider</InputLabel>
-              <Select
-                labelId="provider-filter-label"
-                value={providerFilter}
-                label="Provider"
-                onChange={(event) => setProviderFilter(event.target.value)}
-              >
-                {providerOptions.map((option) => (
-                  <MenuItem key={option.value} value={option.value}>
-                    {option.label}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            <ToggleButtonGroup
-              exclusive
-              value={view}
-              onChange={(_, next) => {
-                if (next) setView(next)
+        {pipelineStatuses.map((s) => (
+          <Box
+            key={s}
+            sx={{
+              p: 3,
+              bgcolor: '#fff',
+              border: '1px solid #e2e8f0',
+              borderLeft: `4px solid ${pipelineAccentColors[s]}`,
+              borderRadius: '5px',
+              cursor: 'pointer',
+              transition: 'background 0.12s',
+              bgcolor: pipelineFilter === s ? '#f8fdf9' : '#fff',
+              '&:hover': { bgcolor: '#f8fdf9' },
+            }}
+            onClick={() => setPipelineFilter((prev) => (prev === s ? 'all' : s))}
+          >
+            <Typography
+              sx={{
+                fontSize: '2rem',
+                fontWeight: 800,
+                color: pipelineAccentColors[s],
+                lineHeight: 1,
+                mb: 0.5,
               }}
-              sx={{ alignSelf: 'stretch' }}
             >
-              <ToggleButton value="table">
-                <TableRows sx={{ mr: 1 }} />
-                Table
-              </ToggleButton>
-              <ToggleButton value="board">
-                <ViewKanban sx={{ mr: 1 }} />
-                Board
-              </ToggleButton>
-            </ToggleButtonGroup>
-          </Stack>
+              {counts[s]}
+            </Typography>
+            <Typography sx={{ color: '#64748b', fontSize: '0.82rem', fontWeight: 500 }}>
+              {pipelineLabels[s]}
+            </Typography>
+          </Box>
+        ))}
+      </Box>
 
-          <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
-            {pipelineStatuses.map((status) => (
-              <Paper
+      {/* ── Filters row ── */}
+      <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} sx={{ mb: 3 }} alignItems="stretch">
+        <TextField
+          placeholder="Search by title, company, location, or job ID…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          size="small"
+          sx={{ flex: 1 }}
+        />
+
+        <FormControl size="small" sx={{ minWidth: 160 }}>
+          <InputLabel>Pipeline status</InputLabel>
+          <Select
+            value={pipelineFilter}
+            label="Pipeline status"
+            onChange={(e) => setPipelineFilter(e.target.value)}
+          >
+            <MenuItem value="all">All statuses</MenuItem>
+            {pipelineStatuses.map((s) => (
+              <MenuItem key={s} value={s}>{pipelineLabels[s]}</MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+
+        <FormControl size="small" sx={{ minWidth: 140 }}>
+          <InputLabel>Run result</InputLabel>
+          <Select
+            value={botStatusFilter}
+            label="Run result"
+            onChange={(e) => setBotStatusFilter(e.target.value)}
+          >
+            <MenuItem value="all">All results</MenuItem>
+            <MenuItem value="applied">Applied</MenuItem>
+            <MenuItem value="failed">Failed</MenuItem>
+          </Select>
+        </FormControl>
+
+        <FormControl size="small" sx={{ minWidth: 180 }}>
+          <InputLabel>Provider</InputLabel>
+          <Select
+            value={providerFilter}
+            label="Provider"
+            onChange={(e) => setProviderFilter(e.target.value)}
+          >
+            {providerOptions.map((o) => (
+              <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+
+        <ToggleButtonGroup
+          exclusive
+          value={view}
+          onChange={(_, next) => { if (next) setView(next) }}
+          size="small"
+          sx={{
+            '& .MuiToggleButton-root': { px: 2, fontSize: '0.82rem' },
+          }}
+        >
+          <ToggleButton value="table">
+            <TableRows sx={{ fontSize: 16, mr: 0.75 }} /> Table
+          </ToggleButton>
+          <ToggleButton value="board">
+            <ViewKanban sx={{ fontSize: 16, mr: 0.75 }} /> Board
+          </ToggleButton>
+        </ToggleButtonGroup>
+      </Stack>
+
+      {/* ── Table view ── */}
+      {view === 'table' ? (
+        <TableContainer
+          component={Paper}
+          sx={{ border: '1px solid #e2e8f0', boxShadow: 'none' }}
+        >
+          <Table size="small">
+            <TableHead>
+              <TableRow sx={{ bgcolor: '#f8fafc' }}>
+                {['Job', 'Provider', 'Pipeline Status', 'Run Result', 'Run', 'Applied At', 'Links'].map((h) => (
+                  <TableCell
+                    key={h}
+                    sx={{
+                      fontWeight: 700,
+                      fontSize: '0.72rem',
+                      color: '#64748b',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.05em',
+                      borderBottom: '2px solid #e2e8f0',
+                      py: 1.5,
+                    }}
+                  >
+                    {h}
+                  </TableCell>
+                ))}
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {jobs.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((job) => (
+                <TableRow key={job.id} hover sx={{ '&:hover': { bgcolor: '#f8fdf9' }, '&:last-child td': { borderBottom: 0 } }}>
+                  {/* Job */}
+                  <TableCell sx={{ minWidth: 260, py: 2 }}>
+                    <Typography sx={{ fontWeight: 700, color: '#0f172a', fontSize: '0.875rem' }}>
+                      {job.title || 'Untitled job'}
+                    </Typography>
+                    <Typography sx={{ color: '#475569', fontSize: '0.82rem' }}>
+                      {job.company || 'Unknown company'}
+                    </Typography>
+                    <Typography sx={{ color: '#94a3b8', fontSize: '0.76rem' }}>
+                      {job.location || 'Unknown location'}
+                    </Typography>
+                    {job.reason_skipped && (
+                      <Typography sx={{ color: '#dc2626', fontSize: '0.72rem', mt: 0.25 }}>
+                        {job.reason_skipped}
+                      </Typography>
+                    )}
+                  </TableCell>
+
+                  {/* Provider */}
+                  <TableCell sx={{ minWidth: 180 }}>
+                    <Stack spacing={0.75}>
+                      <Chip
+                        label={providerLabel(job.application_provider)}
+                        size="small"
+                        variant="outlined"
+                        sx={{ fontSize: '0.72rem', height: 22, borderColor: '#d1d5db' }}
+                      />
+                      <Chip
+                        label={job.application_stage || 'submitted'}
+                        size="small"
+                        color={job.application_stage === 'review_pending' ? 'warning' : 'default'}
+                        sx={{ fontSize: '0.72rem', height: 22, textTransform: 'capitalize' }}
+                      />
+                      {job.review_required && (
+                        <Chip
+                          label="Review required"
+                          size="small"
+                          color="warning"
+                          variant="filled"
+                          sx={{ fontSize: '0.72rem', height: 22 }}
+                        />
+                      )}
+                    </Stack>
+                  </TableCell>
+
+                  {/* Pipeline status */}
+                  <TableCell>
+                    <FormControl size="small" sx={{ minWidth: 150 }}>
+                      <Select
+                        value={job.pipeline_status}
+                        onChange={(e) => updatePipelineStatus(job.id, e.target.value as PipelineStatus)}
+                        sx={{ fontSize: '0.82rem' }}
+                      >
+                        {pipelineStatuses.map((s) => (
+                          <MenuItem key={s} value={s}>{pipelineLabels[s]}</MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </TableCell>
+
+                  {/* Run result */}
+                  <TableCell>
+                    <Chip
+                      label={job.status}
+                      color={job.status === 'applied' ? 'success' : 'error'}
+                      variant="outlined"
+                      size="small"
+                      sx={{ fontSize: '0.72rem', textTransform: 'capitalize', height: 22 }}
+                    />
+                  </TableCell>
+
+                  {/* Run */}
+                  <TableCell>
+                    <Typography sx={{ fontFamily: 'monospace', fontSize: '0.82rem', color: '#475569' }}>
+                      #{job.run_id}
+                    </Typography>
+                  </TableCell>
+
+                  {/* Applied at */}
+                  <TableCell>
+                    <Typography sx={{ fontSize: '0.78rem', color: '#64748b' }}>
+                      {new Date(job.created_at).toLocaleString(undefined, {
+                        month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+                      })}
+                    </Typography>
+                  </TableCell>
+
+                  {/* Links */}
+                  <TableCell align="right">
+                    <Stack direction="row" spacing={0.75} justifyContent="flex-end">
+                      {job.job_link && (
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          href={job.job_link}
+                          target="_blank"
+                          rel="noreferrer"
+                          startIcon={<OpenInNew sx={{ fontSize: 13 }} />}
+                          sx={{ fontSize: '0.72rem', py: 0.4, px: 1, borderColor: '#d1d5db', color: '#374151' }}
+                        >
+                          Job
+                        </Button>
+                      )}
+                      {job.external_link && job.external_link !== 'Easy Applied' && (
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          href={job.external_link}
+                          target="_blank"
+                          rel="noreferrer"
+                          startIcon={<OpenInNew sx={{ fontSize: 13 }} />}
+                          sx={{ fontSize: '0.72rem', py: 0.4, px: 1, borderColor: '#d1d5db', color: '#374151' }}
+                        >
+                          External
+                        </Button>
+                      )}
+                    </Stack>
+                  </TableCell>
+                </TableRow>
+              ))}
+              {jobs.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={7} sx={{ py: 6, textAlign: 'center', color: '#64748b' }}>
+                    No jobs matched the current filters.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+          <TablePagination
+            component="div"
+            count={jobs.length}
+            page={page}
+            onPageChange={(_, p) => setPage(p)}
+            rowsPerPage={rowsPerPage}
+            rowsPerPageOptions={[rowsPerPage]}
+          />
+        </TableContainer>
+      ) : (
+        /* ── Board view ── */
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr', lg: 'repeat(4, minmax(0, 1fr))' },
+            gap: 2,
+          }}
+        >
+          {pipelineStatuses.map((status) => {
+            const columnJobs = jobs.filter((j) => j.pipeline_status === status)
+            return (
+              <Box
                 key={status}
                 sx={{
-                  flex: 1,
-                  p: 2.5,
-                  borderRadius: 3,
                   border: '1px solid #e2e8f0',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+                  borderTop: `3px solid ${pipelineAccentColors[status]}`,
+                  bgcolor: '#fafafa',
+                  minHeight: 420,
                 }}
               >
-                <Typography sx={{ color: '#64748b', fontSize: '0.9rem', mb: 1 }}>
-                  {pipelineLabels[status]}
-                </Typography>
-                <Typography variant="h4" sx={{ color: '#0f172a', fontWeight: 800 }}>
-                  {counts[status]}
-                </Typography>
-              </Paper>
-            ))}
-          </Stack>
+                {/* Column header */}
+                <Stack
+                  direction="row"
+                  justifyContent="space-between"
+                  alignItems="center"
+                  sx={{ px: 2, py: 1.5, borderBottom: '1px solid #e2e8f0', bgcolor: '#fff' }}
+                >
+                  <Typography sx={{ fontWeight: 700, fontSize: '0.82rem', color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    {pipelineLabels[status]}
+                  </Typography>
+                  <Box
+                    sx={{
+                      minWidth: 22,
+                      height: 22,
+                      px: 0.75,
+                      bgcolor: pipelineAccentColors[status],
+                      color: '#fff',
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    {columnJobs.length}
+                  </Box>
+                </Stack>
 
-          {view === 'table' ? (
-            <TableContainer component={Paper} sx={{ borderRadius: 3, border: '1px solid #e2e8f0' }}>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Job</TableCell>
-                    <TableCell>Provider</TableCell>
-                    <TableCell>Status</TableCell>
-                    <TableCell>Run Result</TableCell>
-                    <TableCell>Run</TableCell>
-                    <TableCell>Applied At</TableCell>
-                    <TableCell align="right">Links</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {jobs
-                    .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-                    .map((job) => (
-                    <TableRow key={job.id} hover>
-                      <TableCell sx={{ minWidth: 280 }}>
-                        <Typography sx={{ fontWeight: 700, color: '#0f172a' }}>
-                          {job.title || 'Untitled job'}
-                        </Typography>
-                        <Typography sx={{ color: '#475569' }}>
-                          {job.company || 'Unknown company'}
-                        </Typography>
-                        <Typography sx={{ color: '#94a3b8', fontSize: '0.85rem' }}>
-                          {job.location || 'Unknown location'}
-                        </Typography>
-                        {job.reason_skipped && (
-                          <Typography sx={{ color: '#dc2626', fontSize: '0.8rem', mt: 0.5 }}>
-                            {job.reason_skipped}
-                          </Typography>
-                        )}
-                      </TableCell>
-                      <TableCell sx={{ minWidth: 180 }}>
-                        <Stack spacing={1}>
-                          <Chip label={providerLabel(job.application_provider)} size="small" variant="outlined" />
-                          <Chip
-                            label={job.application_stage || 'submitted'}
-                            size="small"
-                            color={job.application_stage === 'review_pending' ? 'warning' : 'default'}
-                            sx={{ textTransform: 'capitalize' }}
-                          />
-                          {job.review_required && (
-                            <Chip label="Review required" size="small" color="warning" variant="filled" />
-                          )}
-                        </Stack>
-                      </TableCell>
-                      <TableCell>
-                        <FormControl size="small" sx={{ minWidth: 160 }}>
-                          <Select
-                            value={job.pipeline_status}
-                            onChange={(event) => updatePipelineStatus(job.id, event.target.value as PipelineStatus)}
-                          >
-                            {pipelineStatuses.map((status) => (
-                              <MenuItem key={status} value={status}>
-                                {pipelineLabels[status]}
-                              </MenuItem>
-                            ))}
-                          </Select>
-                        </FormControl>
-                      </TableCell>
-                      <TableCell>
+                {/* Cards */}
+                <Stack spacing={0} sx={{ p: 1.5, gap: 1 }}>
+                  {columnJobs.map((job) => (
+                    <Box
+                      key={job.id}
+                      sx={{
+                        p: 2,
+                        bgcolor: '#fff',
+                        border: '1px solid #e8edf2',
+                        borderLeft: `3px solid ${job.status === 'applied' ? '#16a34a' : '#ef4444'}`,
+                        '&:hover': { borderColor: '#cbd5e1', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' },
+                        transition: 'all 0.12s',
+                      }}
+                    >
+                      <Typography sx={{ fontWeight: 700, color: '#0f172a', fontSize: '0.85rem', mb: 0.25 }}>
+                        {job.title || 'Untitled job'}
+                      </Typography>
+                      <Typography sx={{ color: '#475569', fontSize: '0.8rem' }}>
+                        {job.company || 'Unknown'}
+                      </Typography>
+                      <Typography sx={{ color: '#94a3b8', fontSize: '0.75rem', mb: 1.5 }}>
+                        {job.location || 'Unknown location'}
+                      </Typography>
+
+                      <FormControl size="small" fullWidth sx={{ mb: 1.5 }}>
+                        <Select
+                          value={job.pipeline_status}
+                          onChange={(e) => updatePipelineStatus(job.id, e.target.value as PipelineStatus)}
+                          sx={{ fontSize: '0.78rem' }}
+                        >
+                          {pipelineStatuses.map((s) => (
+                            <MenuItem key={s} value={s}>{pipelineLabels[s]}</MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+
+                      <Stack direction="row" spacing={0.75} sx={{ mb: 1.5, flexWrap: 'wrap', gap: 0.5 }}>
+                        <Chip
+                          label={providerLabel(job.application_provider)}
+                          size="small"
+                          variant="outlined"
+                          sx={{ fontSize: '0.68rem', height: 20, borderColor: '#d1d5db' }}
+                        />
                         <Chip
                           label={job.status}
                           color={job.status === 'applied' ? 'success' : 'error'}
+                          size="small"
                           variant="outlined"
-                          sx={{ textTransform: 'capitalize' }}
+                          sx={{ fontSize: '0.68rem', height: 20, textTransform: 'capitalize' }}
                         />
-                      </TableCell>
-                      <TableCell>#{job.run_id}</TableCell>
-                      <TableCell>{new Date(job.created_at).toLocaleString()}</TableCell>
-                      <TableCell align="right">
-                        <Stack direction="row" spacing={1} justifyContent="flex-end">
-                          {job.job_link && (
-                            <Button
-                              size="small"
-                              variant="outlined"
-                              href={job.job_link}
-                              target="_blank"
-                              rel="noreferrer"
-                              startIcon={<OpenInNew />}
-                            >
-                              Job
-                            </Button>
-                          )}
-                          {job.external_link && job.external_link !== 'Easy Applied' && (
-                            <Button
-                              size="small"
-                              variant="outlined"
-                              href={job.external_link}
-                              target="_blank"
-                              rel="noreferrer"
-                              startIcon={<OpenInNew />}
-                            >
-                              External
-                            </Button>
-                          )}
-                        </Stack>
-                      </TableCell>
-                    </TableRow>
+                        <Chip
+                          label={`Run #${job.run_id}`}
+                          size="small"
+                          variant="outlined"
+                          sx={{ fontSize: '0.68rem', height: 20, borderColor: '#d1d5db', color: '#64748b' }}
+                        />
+                      </Stack>
+
+                      <Stack direction="row" spacing={0.75}>
+                        {job.job_link && (
+                          <Button
+                            fullWidth
+                            size="small"
+                            variant="outlined"
+                            href={job.job_link}
+                            target="_blank"
+                            rel="noreferrer"
+                            sx={{ fontSize: '0.72rem', py: 0.4, borderColor: '#d1d5db', color: '#374151' }}
+                          >
+                            Job
+                          </Button>
+                        )}
+                        {job.external_link && job.external_link !== 'Easy Applied' && (
+                          <Button
+                            fullWidth
+                            size="small"
+                            variant="outlined"
+                            href={job.external_link}
+                            target="_blank"
+                            rel="noreferrer"
+                            sx={{ fontSize: '0.72rem', py: 0.4, borderColor: '#d1d5db', color: '#374151' }}
+                          >
+                            External
+                          </Button>
+                        )}
+                      </Stack>
+                    </Box>
                   ))}
-                  {jobs.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={7}>
-                        <Typography sx={{ py: 4, textAlign: 'center', color: '#64748b' }}>
-                          No jobs matched the current filters.
-                        </Typography>
-                      </TableCell>
-                    </TableRow>
+
+                  {columnJobs.length === 0 && (
+                    <Typography sx={{ color: '#94a3b8', fontSize: '0.82rem', py: 3, textAlign: 'center' }}>
+                      No jobs here yet
+                    </Typography>
                   )}
-                </TableBody>
-              </Table>
-              <TablePagination
-                component="div"
-                count={jobs.length}
-                page={page}
-                onPageChange={(_, newPage) => setPage(newPage)}
-                rowsPerPage={rowsPerPage}
-                rowsPerPageOptions={[rowsPerPage]}
-              />
-            </TableContainer>
-          ) : (
-            <Box
-              sx={{
-                display: 'grid',
-                gridTemplateColumns: { xs: '1fr', lg: 'repeat(4, minmax(0, 1fr))' },
-                gap: 2,
-              }}
-            >
-              {pipelineStatuses.map((status) => {
-                const columnJobs = jobs.filter((job) => job.pipeline_status === status)
-                return (
-                  <Paper
-                    key={status}
-                    sx={{
-                      p: 2,
-                      borderRadius: 3,
-                      border: '1px solid #e2e8f0',
-                      bgcolor: '#fcfffd',
-                      minHeight: 420,
-                    }}
-                  >
-                    <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-                      <Typography sx={{ fontWeight: 700, color: '#0f172a' }}>
-                        {pipelineLabels[status]}
-                      </Typography>
-                      <Chip label={columnJobs.length} color={pipelineColors[status]} size="small" />
-                    </Stack>
-                    <Stack spacing={1.5}>
-                      {columnJobs.map((job) => (
-                        <Paper
-                          key={job.id}
-                          sx={{
-                            p: 2,
-                            borderRadius: 2.5,
-                            border: '1px solid #e2e8f0',
-                            boxShadow: '0 1px 2px rgba(15,23,42,0.04)',
-                          }}
-                        >
-                          <Typography sx={{ fontWeight: 700, color: '#0f172a' }}>
-                            {job.title || 'Untitled job'}
-                          </Typography>
-                          <Typography sx={{ color: '#475569', fontSize: '0.9rem' }}>
-                            {job.company || 'Unknown company'}
-                          </Typography>
-                          <Typography sx={{ color: '#94a3b8', fontSize: '0.8rem', mb: 1.5 }}>
-                            {job.location || 'Unknown location'}
-                          </Typography>
-                          <FormControl size="small" fullWidth sx={{ mb: 1.5 }}>
-                            <Select
-                              value={job.pipeline_status}
-                              onChange={(event) => updatePipelineStatus(job.id, event.target.value as PipelineStatus)}
-                            >
-                              {pipelineStatuses.map((value) => (
-                                <MenuItem key={value} value={value}>
-                                  {pipelineLabels[value]}
-                                </MenuItem>
-                              ))}
-                            </Select>
-                          </FormControl>
-                          <Stack direction="row" spacing={1} sx={{ mb: 1.5, flexWrap: 'wrap' }}>
-                            <Chip label={providerLabel(job.application_provider)} size="small" variant="outlined" />
-                            <Chip
-                              label={job.application_stage || 'submitted'}
-                              size="small"
-                              color={job.application_stage === 'review_pending' ? 'warning' : 'default'}
-                              sx={{ textTransform: 'capitalize' }}
-                            />
-                            <Chip
-                              label={job.status}
-                              color={job.status === 'applied' ? 'success' : 'error'}
-                              size="small"
-                              variant="outlined"
-                              sx={{ textTransform: 'capitalize' }}
-                            />
-                            <Chip label={`Run #${job.run_id}`} size="small" variant="outlined" />
-                            {job.review_required && <Chip label="Review required" size="small" color="warning" />}
-                          </Stack>
-                          <Stack direction="row" spacing={1}>
-                            {job.job_link && (
-                              <Button
-                                fullWidth
-                                size="small"
-                                variant="outlined"
-                                href={job.job_link}
-                                target="_blank"
-                                rel="noreferrer"
-                              >
-                                Job link
-                              </Button>
-                            )}
-                            {job.external_link && job.external_link !== 'Easy Applied' && (
-                              <Button
-                                fullWidth
-                                size="small"
-                                variant="outlined"
-                                href={job.external_link}
-                                target="_blank"
-                                rel="noreferrer"
-                              >
-                                External
-                              </Button>
-                            )}
-                          </Stack>
-                        </Paper>
-                      ))}
-                      {columnJobs.length === 0 && (
-                        <Typography sx={{ color: '#94a3b8', fontSize: '0.9rem', py: 2 }}>
-                          No jobs in this column yet.
-                        </Typography>
-                      )}
-                    </Stack>
-                  </Paper>
-                )
-              })}
-            </Box>
-          )}
-        </Stack>
-      </Container>
+                </Stack>
+              </Box>
+            )
+          })}
+        </Box>
+      )}
     </Box>
   )
 }

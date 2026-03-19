@@ -1,17 +1,11 @@
 import {
   Alert,
-  AppBar,
-  Avatar,
   Box,
   Button,
   Chip,
-  Collapse,
-  Container,
-  Divider,
   Dialog,
-  DialogActions,
   DialogContent,
-  DialogTitle,
+  FormControl,
   IconButton,
   MenuItem,
   Pagination,
@@ -19,30 +13,31 @@ import {
   Select,
   Stack,
   Switch,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
   TextField,
-  Toolbar,
   Typography,
 } from '@mui/material'
 import {
-  ExpandLess,
-  ExpandMore,
-  OpenInNew,
+  Close,
   PlayArrow,
-  Stop,
   PowerSettingsNew,
   Refresh,
   RocketLaunch,
-  Logout,
+  Stop,
+  Terminal,
   AccessTime,
   CheckCircle,
   Error as ErrorIcon,
   HourglassEmpty,
-  Settings,
 } from '@mui/icons-material'
 import type { ReactElement } from 'react'
-import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { api } from '../api'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { api, apiBaseUrl } from '../api'
 
 type RunStatus = 'pending' | 'running' | 'stopping' | 'stopped' | 'success' | 'completed' | 'failed'
 
@@ -60,22 +55,222 @@ type RunDetail = Run & {
 }
 
 const statusConfig: Record<string, { color: 'success' | 'warning' | 'error' | 'default'; icon: ReactElement; label: string }> = {
-  running: { color: 'success', icon: <HourglassEmpty sx={{ fontSize: 16 }} />, label: 'running' },
-  success: { color: 'success', icon: <CheckCircle sx={{ fontSize: 16 }} />, label: 'success' },
-  completed: { color: 'success', icon: <CheckCircle sx={{ fontSize: 16 }} />, label: 'completed' },
-  stopping: { color: 'warning', icon: <AccessTime sx={{ fontSize: 16 }} />, label: 'stopping' },
-  stopped: { color: 'warning', icon: <Stop sx={{ fontSize: 16 }} />, label: 'stopped' },
-  failed: { color: 'error', icon: <ErrorIcon sx={{ fontSize: 16 }} />, label: 'failed' },
-  pending: { color: 'default', icon: <AccessTime sx={{ fontSize: 16 }} />, label: 'pending' },
+  running:   { color: 'success', icon: <HourglassEmpty sx={{ fontSize: 14 }} />, label: 'running' },
+  success:   { color: 'success', icon: <CheckCircle sx={{ fontSize: 14 }} />,    label: 'success' },
+  completed: { color: 'success', icon: <CheckCircle sx={{ fontSize: 14 }} />,    label: 'completed' },
+  stopping:  { color: 'warning', icon: <AccessTime sx={{ fontSize: 14 }} />,     label: 'stopping' },
+  stopped:   { color: 'warning', icon: <Stop sx={{ fontSize: 14 }} />,           label: 'stopped' },
+  failed:    { color: 'error',   icon: <ErrorIcon sx={{ fontSize: 14 }} />,      label: 'failed' },
+  pending:   { color: 'default', icon: <AccessTime sx={{ fontSize: 14 }} />,     label: 'pending' },
+}
+
+function getDuration(run: Run): string {
+  const start = new Date(run.started_at).getTime()
+  const end = run.finished_at ? new Date(run.finished_at).getTime() : Date.now()
+  const s = Math.floor((end - start) / 1000)
+  const m = Math.floor(s / 60)
+  const h = Math.floor(m / 60)
+  if (h > 0) return `${h}h ${m % 60}m`
+  if (m > 0) return `${m}m ${s % 60}s`
+  return `${s}s`
+}
+
+function TerminalLogDialog({
+  open,
+  onClose,
+  run,
+  details,
+}: {
+  open: boolean
+  onClose: () => void
+  run: Run | null
+  details: RunDetail | null
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  // Auto-scroll to bottom when logs update
+  useEffect(() => {
+    if (open && scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    }
+  }, [open, details?.log_excerpt])
+
+  const lines = details?.log_excerpt?.split('\n') ?? []
+
+  function lineColor(line: string): string {
+    if (line.startsWith('[STEP]')) return '#4ade80'
+    if (/error|exception|failed|traceback/i.test(line)) return '#f87171'
+    if (/warning|warn/i.test(line)) return '#fbbf24'
+    if (/success|completed|done/i.test(line)) return '#86efac'
+    return '#a3c4b0'
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="md"
+      fullWidth
+      PaperProps={{
+        sx: {
+          bgcolor: '#0a0f0a',
+          border: '1px solid #1c3a1c',
+          overflow: 'hidden',
+          boxShadow: '0 24px 64px rgba(0,0,0,0.6)',
+        },
+      }}
+    >
+      {/* Terminal title bar */}
+      <Box
+        sx={{
+          bgcolor: '#111a11',
+          px: 2,
+          py: 1,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+          borderBottom: '1px solid #1c3a1c',
+        }}
+      >
+        {/* macOS-style dots */}
+        <Box sx={{ display: 'flex', gap: 0.75, mr: 1.5 }}>
+          <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: '#ff5f57' }} />
+          <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: '#febc2e' }} />
+          <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: '#28c840' }} />
+        </Box>
+        <Terminal sx={{ fontSize: 14, color: '#3a6a4a', mr: 0.5 }} />
+        <Typography
+          sx={{
+            flex: 1,
+            textAlign: 'center',
+            fontFamily: 'monospace',
+            fontSize: '0.78rem',
+            color: '#4a8a5a',
+            letterSpacing: '0.03em',
+          }}
+        >
+          {run ? `run #${run.id} — ${run.run_type ?? 'apply'} — ${statusConfig[run.status]?.label ?? run.status}` : '—'}
+        </Typography>
+        <IconButton size="small" onClick={onClose} sx={{ color: '#3a6a4a', p: 0.5, '&:hover': { color: '#86efac' } }}>
+          <Close sx={{ fontSize: 15 }} />
+        </IconButton>
+      </Box>
+
+      <DialogContent sx={{ p: 0 }}>
+        {/* Live indicator */}
+        {run?.status === 'running' && (
+          <Box
+            sx={{
+              px: 2.5,
+              py: 0.75,
+              bgcolor: 'rgba(34,197,94,0.08)',
+              borderBottom: '1px solid rgba(34,197,94,0.12)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+            }}
+          >
+            <Box
+              sx={{
+                width: 7,
+                height: 7,
+                borderRadius: '50%',
+                bgcolor: '#4ade80',
+                boxShadow: '0 0 6px #4ade80',
+                animation: 'pulse 1.5s infinite',
+                '@keyframes pulse': {
+                  '0%, 100%': { opacity: 1 },
+                  '50%': { opacity: 0.4 },
+                },
+              }}
+            />
+            <Typography sx={{ fontFamily: 'monospace', fontSize: '0.72rem', color: '#4ade80' }}>
+              LIVE — streaming logs
+            </Typography>
+          </Box>
+        )}
+
+        {/* Log content */}
+        <Box
+          ref={scrollRef}
+          sx={{
+            p: 2.5,
+            fontFamily: '"Fira Code", "Cascadia Code", "Consolas", monospace',
+            fontSize: '0.76rem',
+            lineHeight: 1.75,
+            maxHeight: '62vh',
+            overflowY: 'auto',
+            '&::-webkit-scrollbar': { width: 5 },
+            '&::-webkit-scrollbar-track': { bgcolor: '#0a0f0a' },
+            '&::-webkit-scrollbar-thumb': { bgcolor: '#1e3a1e' },
+          }}
+        >
+          {lines.length === 0 ? (
+            <Typography sx={{ color: '#3a6a4a', fontFamily: 'inherit', fontSize: 'inherit' }}>
+              {details ? 'No logs captured for this run yet.' : 'Loading logs…'}
+            </Typography>
+          ) : (
+            lines.map((line, i) => (
+              <Box
+                key={i}
+                component="div"
+                sx={{
+                  color: lineColor(line),
+                  minHeight: '1.2em',
+                  wordBreak: 'break-all',
+                }}
+              >
+                {line || '\u00A0'}
+              </Box>
+            ))
+          )}
+        </Box>
+
+        {/* Bottom prompt line */}
+        <Box
+          sx={{
+            px: 2.5,
+            py: 1,
+            bgcolor: '#0d150d',
+            borderTop: '1px solid #1c3a1c',
+            fontFamily: 'monospace',
+            fontSize: '0.72rem',
+            color: '#2d5a2d',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 0.5,
+          }}
+        >
+          <Box component="span" sx={{ color: '#4ade80' }}>
+            $
+          </Box>{' '}
+          autoapply-bot
+          {run?.status === 'running' && (
+            <Box
+              component="span"
+              sx={{
+                ml: 0.5,
+                display: 'inline-block',
+                width: 7,
+                height: 13,
+                bgcolor: '#4ade80',
+                verticalAlign: 'middle',
+                animation: 'blink 1s step-start infinite',
+                '@keyframes blink': { '50%': { opacity: 0 } },
+              }}
+            />
+          )}
+        </Box>
+      </DialogContent>
+    </Dialog>
+  )
 }
 
 export function Dashboard() {
-  const navigate = useNavigate()
   const [runs, setRuns] = useState<Run[]>([])
   const [runsPage, setRunsPage] = useState(1)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const [expandedRuns, setExpandedRuns] = useState<Record<number, boolean>>({})
   const [runDetails, setRunDetails] = useState<Record<number, RunDetail>>({})
   const [resumes, setResumes] = useState<{ id: string; label: string }[]>([])
   const [selectedResumeId, setSelectedResumeId] = useState<string | ''>('')
@@ -88,7 +283,9 @@ export function Dashboard() {
     use_ai_for_outreach: false,
     attach_default_resume: false,
   })
+  const [logDialogRunId, setLogDialogRunId] = useState<number | null>(null)
   const runsPerPage = 25
+  const eventSourceRef = useRef<EventSource | null>(null)
 
   async function loadResumes() {
     const resumesResp = await api.get('/resumes')
@@ -120,21 +317,27 @@ export function Dashboard() {
     }))
   }
 
-  async function refreshExpandedRunDetails(runIds?: number[]) {
-    const ids = runIds ?? Object.entries(expandedRuns)
-      .filter(([, expanded]) => expanded)
-      .map(([id]) => Number(id))
-
-    if (ids.length === 0) return
-
-    const results = await Promise.all(ids.map((runId) => api.get(`/runs/${runId}`)))
-    setRunDetails((current) => {
-      const next = { ...current }
-      results.forEach((resp) => {
-        next[resp.data.id] = resp.data
-      })
+  function applyRunUpdate(updatedRun: RunDetail) {
+    setRuns((current) => {
+      const next = [...current]
+      const index = next.findIndex((item) => item.id === updatedRun.id)
+      const baseRun = {
+        id: updatedRun.id,
+        status: updatedRun.status,
+        run_type: updatedRun.run_type,
+        started_at: updatedRun.started_at,
+        finished_at: updatedRun.finished_at,
+        error_message: updatedRun.error_message,
+      }
+      if (index >= 0) {
+        next[index] = { ...next[index], ...baseRun }
+      } else {
+        next.unshift(baseRun)
+      }
+      next.sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime())
       return next
     })
+    setRunDetails((current) => ({ ...current, [updatedRun.id]: updatedRun }))
   }
 
   async function refreshRuns() {
@@ -142,7 +345,6 @@ export function Dashboard() {
       const resp = await api.get('/runs')
       setRuns(resp.data)
       setRunsPage(1)
-      await refreshExpandedRunDetails()
     } catch {
       // silent
     }
@@ -160,10 +362,7 @@ export function Dashboard() {
     setError(null)
     setLoading(true)
     try {
-      // If a resume is selected, mark it as default before starting the run
-      if (selectedResumeId) {
-        await api.post(`/resumes/${selectedResumeId}/default`)
-      }
+      if (selectedResumeId) await api.post(`/resumes/${selectedResumeId}/default`)
       await api.post('/runs')
       await Promise.all([refreshRuns(), loadResumes()])
     } catch (e: any) {
@@ -183,51 +382,19 @@ export function Dashboard() {
     await refreshRuns()
   }
 
-  async function toggleRun(runId: number) {
-    const nextExpanded = !expandedRuns[runId]
-    setExpandedRuns((current) => ({ ...current, [runId]: nextExpanded }))
-
-    if (nextExpanded && !runDetails[runId]) {
-      await refreshExpandedRunDetails([runId])
+  async function openLogs(runId: number) {
+    setLogDialogRunId(runId)
+    if (!runDetails[runId]) {
+      const resp = await api.get(`/runs/${runId}`)
+      setRunDetails((current) => ({ ...current, [runId]: resp.data }))
     }
   }
-
-  function logout() {
-    localStorage.removeItem('access_token')
-    navigate('/auth')
-  }
-
-  useEffect(() => {
-    void refreshAll()
-  }, [])
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const hasActiveRun = runs.some((run) => run.status === 'running' || run.status === 'stopping')
-      if (document.visibilityState === 'visible' && hasActiveRun) {
-        void refreshRuns()
-      }
-    }, 4000)
-    return () => clearInterval(interval)
-  }, [runs])
-
-  const latest = runs[0]
-  const activeRun = runs.find((run) => run.status === 'running' || run.status === 'stopping')
-  const runningCount = runs.filter((run) => run.status === 'running').length
-  const completedCount = runs.filter((run) => run.status === 'success' || run.status === 'completed').length
-  const totalCount = runs.length
-  const totalPages = Math.max(1, Math.ceil(totalCount / runsPerPage))
-  const currentPage = Math.min(runsPage, totalPages)
-  const paginatedRuns = runs.slice((currentPage - 1) * runsPerPage, currentPage * runsPerPage)
 
   async function startOutreachRun() {
     setError(null)
     setLoading(true)
     try {
-      await api.post('/runs/outreach', {
-        run_type: 'outreach',
-        run_input: outreachDraft,
-      })
+      await api.post('/runs/outreach', { run_type: 'outreach', run_input: outreachDraft })
       setOutreachDialogOpen(false)
       await refreshRuns()
     } catch (e: any) {
@@ -237,487 +404,607 @@ export function Dashboard() {
     }
   }
 
+  const streamUrl = useMemo(() => {
+    const token = localStorage.getItem('access_token')
+    if (!token) return null
+    return `${apiBaseUrl}/runs/stream?token=${encodeURIComponent(token)}`
+  }, [])
+
+  useEffect(() => { void refreshAll() }, [])
+
+  useEffect(() => {
+    if (!streamUrl) return
+    const source = new EventSource(streamUrl)
+    eventSourceRef.current = source
+
+    source.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data)
+        if (payload.type === 'runs_snapshot' && Array.isArray(payload.runs)) {
+          const snapshotRuns = payload.runs as RunDetail[]
+          setRuns(snapshotRuns.map((run) => ({
+            id: run.id, status: run.status, run_type: run.run_type,
+            started_at: run.started_at, finished_at: run.finished_at, error_message: run.error_message,
+          })))
+          setRunDetails((current) => {
+            const next = { ...current }
+            snapshotRuns.forEach((run) => { next[run.id] = run })
+            return next
+          })
+          return
+        }
+        if (payload.run) applyRunUpdate(payload.run as RunDetail)
+      } catch { /* ignore */ }
+    }
+
+    return () => { source.close(); eventSourceRef.current = null }
+  }, [streamUrl])
+
+  const latest = runs[0]
+  const activeRun = runs.find((r) => r.status === 'running' || r.status === 'stopping')
+  const runningCount  = runs.filter((r) => r.status === 'running').length
+  const completedCount = runs.filter((r) => r.status === 'success' || r.status === 'completed').length
+  const failedCount   = runs.filter((r) => r.status === 'failed').length
+  const totalCount    = runs.length
+  const totalPages    = Math.max(1, Math.ceil(totalCount / runsPerPage))
+  const currentPage   = Math.min(runsPage, totalPages)
+  const paginatedRuns = runs.slice((currentPage - 1) * runsPerPage, currentPage * runsPerPage)
+
+  const logDialogRun     = logDialogRunId != null ? (runs.find((r) => r.id === logDialogRunId) ?? null) : null
+  const logDialogDetails = logDialogRunId != null ? (runDetails[logDialogRunId] ?? null) : null
+
+  const statCards = [
+    { label: 'Total Runs',  value: totalCount,    color: '#16a34a', bg: '#f0fdf4' },
+    { label: 'Running',     value: runningCount,  color: '#f59e0b', bg: '#fffbeb' },
+    { label: 'Completed',   value: completedCount, color: '#0ea5e9', bg: '#f0f9ff' },
+    { label: 'Failed',      value: failedCount,   color: '#ef4444', bg: '#fef2f2' },
+  ]
+
   return (
-    <Box sx={{ minHeight: '100dvh', bgcolor: '#f8faf9' }}>
-      <AppBar
-        position="sticky"
-        elevation={0}
+    <Box sx={{ p: { xs: 3, md: 4 }, minHeight: '100%' }}>
+      {/* ── Page header ── */}
+      <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 4 }}>
+        <Box>
+          <Typography variant="h4" sx={{ color: '#0f172a', fontWeight: 800, letterSpacing: '-0.02em' }}>
+            Dashboard
+          </Typography>
+          <Typography color="text.secondary" sx={{ mt: 0.5, fontSize: '0.9rem' }}>
+            Monitor and control your automated job application runs.
+          </Typography>
+        </Box>
+        <Button
+          variant="outlined"
+          startIcon={<Refresh sx={{ fontSize: 16 }} />}
+          onClick={refreshAll}
+          size="small"
+          sx={{
+            borderColor: '#d1d5db',
+            color: '#374151',
+            '&:hover': { borderColor: '#16a34a', color: '#16a34a', bgcolor: 'transparent' },
+          }}
+        >
+          Refresh
+        </Button>
+      </Stack>
+
+      {error && (
+        <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 3 }}>
+          {error}
+        </Alert>
+      )}
+
+      {/* ── Stat cards ── */}
+      <Box
         sx={{
-          background: 'rgba(255,255,255,0.9)',
-          backdropFilter: 'blur(12px)',
-          borderBottom: '1px solid #e2e8f0',
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(4, 1fr)' },
+          gap: 2,
+          mb: 3,
         }}
       >
-        <Toolbar sx={{ maxWidth: 1200, width: '100%', mx: 'auto' }}>
-          <Stack direction="row" alignItems="center" spacing={1} sx={{ flexGrow: 1 }}>
-            <RocketLaunch sx={{ color: '#16a34a', fontSize: 26 }} />
-            <Typography sx={{ fontWeight: 800, color: '#14532d', fontSize: '1.05rem' }}>
-              AutoApply
-            </Typography>
-          </Stack>
-          <Stack direction="row" spacing={1} alignItems="center">
-            <Button
-              variant="outlined"
-              startIcon={<OpenInNew />}
-              onClick={() => navigate('/jobs')}
-              sx={{ borderColor: '#d1d5db', color: '#374151' }}
-            >
-              Jobs
-            </Button>
-            <Button
-              variant="outlined"
-              startIcon={<OpenInNew />}
-              onClick={() => navigate('/outreaches')}
-              sx={{ borderColor: '#d1d5db', color: '#374151' }}
-            >
-              Outreaches
-            </Button>
-            <IconButton onClick={() => navigate('/settings/personals')} size="small" title="Settings">
-              <Settings sx={{ fontSize: 20, color: '#64748b' }} />
-            </IconButton>
-            <IconButton onClick={logout} size="small" title="Logout">
-              <Logout sx={{ fontSize: 20, color: '#64748b' }} />
-            </IconButton>
-          </Stack>
-        </Toolbar>
-      </AppBar>
-
-      <Container maxWidth="lg" sx={{ py: { xs: 3, md: 5 } }}>
-        <Stack spacing={4} className="fade-in">
-          <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'center' }} spacing={2}>
-            <Box>
-              <Typography variant="h4" sx={{ color: '#0f172a' }}>
-                Dashboard
-              </Typography>
-              <Typography color="text.secondary">
-                Manage and monitor your automated job applications.
-              </Typography>
-            </Box>
-            <Button
-              variant="contained"
-              startIcon={<Refresh sx={{ fontSize: 18 }} />}
-              onClick={refreshAll}
-              sx={{
-                bgcolor: '#f0fdf4',
-                color: '#16a34a',
-                border: '1px solid #bbf7d0',
-                '&:hover': { bgcolor: '#dcfce7' },
-                background: '#f0fdf4',
-                alignSelf: 'flex-start',
-              }}
-            >
-              Refresh
-            </Button>
-          </Stack>
-
-          {error && <Alert severity="error" onClose={() => setError(null)}>{error}</Alert>}
-
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={3}>
-            {[
-              { label: 'Total Runs', value: totalCount, color: '#16a34a', bgColor: '#f0fdf4' },
-              { label: 'Running', value: runningCount, color: '#f59e0b', bgColor: '#fffbeb' },
-              { label: 'Completed', value: completedCount, color: '#0ea5e9', bgColor: '#f0f9ff' },
-            ].map((stat) => (
-              <Box
-                key={stat.label}
-                sx={{
-                  flex: 1,
-                  p: 3,
-                  borderRadius: 3,
-                  bgcolor: '#fff',
-                  border: '1px solid #e2e8f0',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
-                }}
-              >
-                <Stack direction="row" alignItems="center" spacing={2}>
-                  <Avatar
-                    sx={{
-                      bgcolor: stat.bgColor,
-                      color: stat.color,
-                      width: 48,
-                      height: 48,
-                    }}
-                  >
-                    <Typography variant="h6" fontWeight={800}>{stat.value}</Typography>
-                  </Avatar>
-                  <Typography sx={{ color: '#64748b', fontWeight: 500 }}>{stat.label}</Typography>
-                </Stack>
-              </Box>
-            ))}
-          </Stack>
-
-          <Paper
+        {statCards.map((stat) => (
+          <Box
+            key={stat.label}
             sx={{
-              p: 4,
-              borderRadius: 3,
-              background: 'linear-gradient(135deg, #14532d 0%, #15803d 80%)',
-              border: 'none',
-              color: '#fff',
+              p: 3,
+              bgcolor: '#fff',
+              border: '1px solid #e2e8f0',
+              borderLeft: `4px solid ${stat.color}`,
+              borderRadius: '5px',
             }}
           >
-            <Stack
-              direction={{ xs: 'column', sm: 'row' }}
-              spacing={3}
-              alignItems={{ sm: 'center' }}
-              justifyContent="space-between"
+            <Typography
+              sx={{
+                fontSize: '2rem',
+                fontWeight: 800,
+                color: stat.color,
+                lineHeight: 1,
+                mb: 0.5,
+              }}
             >
-              <Stack spacing={0.5}>
-                <Typography variant="h6" fontWeight={700} color="#fff">
-                  Bot Controls
-                </Typography>
-                <Stack direction="row" spacing={1} alignItems="center">
-                  <Box
-                    sx={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: '50%',
-                      bgcolor: latest?.status === 'running' ? '#4ade80' : '#94a3b8',
-                      boxShadow: latest?.status === 'running' ? '0 0 8px #4ade80' : 'none',
-                    }}
-                  />
-                  <Typography sx={{ color: '#bbf7d0', fontSize: '0.95rem' }}>
-                    {latest ? `Latest: ${statusConfig[latest.status]?.label ?? latest.status}` : 'No runs yet'}
-                  </Typography>
-                </Stack>
-              </Stack>
-              <Stack direction="row" spacing={1.5} alignItems="center">
-                <Select
-                  size="small"
-                  displayEmpty
-                  value={selectedResumeId}
-                  onChange={(e) => setSelectedResumeId(e.target.value as string)}
-                  sx={{
-                    minWidth: 220,
-                    bgcolor: '#f0fdf4',
-                    color: '#14532d',
-                    '& .MuiOutlinedInput-notchedOutline': { borderColor: '#bbf7d0' },
-                  }}
-                >
-                  <MenuItem value="">
-                    <em>Default resume (from settings)</em>
-                  </MenuItem>
-                  {resumes.map((r) => (
-                    <MenuItem key={r.id} value={r.id}>
-                      {r.label}
-                    </MenuItem>
-                  ))}
-                </Select>
+              {stat.value}
+            </Typography>
+            <Typography sx={{ color: '#64748b', fontSize: '0.82rem', fontWeight: 500 }}>
+              {stat.label}
+            </Typography>
+          </Box>
+        ))}
+      </Box>
+
+      {/* ── Bot controls panel ── */}
+      <Box
+        sx={{
+          p: 3,
+          mb: 3,
+          background: 'linear-gradient(135deg, #0f2d1a 0%, #14532d 60%, #15803d 100%)',
+          border: '1px solid #166534',
+          borderRadius: '5px',
+          color: '#fff',
+        }}
+      >
+        <Stack
+          direction={{ xs: 'column', md: 'row' }}
+          spacing={2.5}
+          alignItems={{ md: 'center' }}
+          justifyContent="space-between"
+        >
+          <Box>
+            <Typography variant="h6" fontWeight={700} color="#fff" sx={{ mb: 0.5 }}>
+              Bot Controls
+            </Typography>
+            <Stack direction="row" alignItems="center" spacing={1}>
+              <Box
+                sx={{
+                  width: 7,
+                  height: 7,
+                  borderRadius: '50%',
+                  bgcolor: latest?.status === 'running' ? '#4ade80' : '#475569',
+                  boxShadow: latest?.status === 'running' ? '0 0 8px #4ade80' : 'none',
+                }}
+              />
+              <Typography sx={{ color: '#86efac', fontSize: '0.85rem' }}>
+                {latest
+                  ? `Latest: #${latest.id} — ${statusConfig[latest.status]?.label ?? latest.status}`
+                  : 'No runs yet'}
+              </Typography>
+            </Stack>
+          </Box>
+
+          <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap">
+            <Select
+              size="small"
+              displayEmpty
+              value={selectedResumeId}
+              onChange={(e) => setSelectedResumeId(e.target.value as string)}
+              sx={{
+                minWidth: 200,
+                bgcolor: 'rgba(255,255,255,0.06)',
+                color: '#d1fae5',
+                fontSize: '0.85rem',
+                '& .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255,255,255,0.15)' },
+                '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255,255,255,0.35)' },
+                '& .MuiSvgIcon-root': { color: '#86efac' },
+              }}
+            >
+              <MenuItem value=""><em>Default resume (from settings)</em></MenuItem>
+              {resumes.map((r) => (
+                <MenuItem key={r.id} value={r.id}>{r.label}</MenuItem>
+              ))}
+            </Select>
+
+            <Button
+              variant="contained"
+              disabled={loading}
+              onClick={startRun}
+              startIcon={<PlayArrow sx={{ fontSize: 16 }} />}
+              sx={{
+                bgcolor: '#fff',
+                color: '#15803d',
+                fontWeight: 700,
+                '&:hover': { bgcolor: '#f0fdf4' },
+                '&:disabled': { bgcolor: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.4)' },
+                background: '#fff',
+              }}
+            >
+              {loading ? 'Starting…' : 'Start Bot'}
+            </Button>
+
+            <Button
+              variant="outlined"
+              onClick={() => setOutreachDialogOpen(true)}
+              sx={{
+                borderColor: 'rgba(255,255,255,0.2)',
+                color: '#d1fae5',
+                '&:hover': { borderColor: '#fff', bgcolor: 'rgba(255,255,255,0.06)' },
+              }}
+            >
+              Start Outreach
+            </Button>
+
+            {activeRun && (
+              <>
                 <Button
-                  variant="contained"
-                  disabled={loading}
-                  onClick={startRun}
-                  startIcon={<PlayArrow />}
+                  variant="outlined"
+                  onClick={() => stopRun(activeRun.id)}
+                  startIcon={<Stop sx={{ fontSize: 16 }} />}
                   sx={{
-                    bgcolor: '#fff',
-                    color: '#15803d',
-                    fontWeight: 700,
-                    '&:hover': { bgcolor: '#f0fdf4' },
-                    '&:disabled': { bgcolor: 'rgba(255,255,255,0.3)', color: 'rgba(255,255,255,0.5)' },
-                    background: '#fff',
+                    borderColor: 'rgba(255,200,0,0.4)',
+                    color: '#fde68a',
+                    '&:hover': { borderColor: '#fde68a', bgcolor: 'rgba(253,230,138,0.08)' },
                   }}
                 >
-                  {loading ? 'Starting...' : 'Start Bot'}
+                  Stop
                 </Button>
                 <Button
                   variant="outlined"
-                  onClick={() => setOutreachDialogOpen(true)}
+                  onClick={() => killRun(activeRun.id)}
+                  startIcon={<PowerSettingsNew sx={{ fontSize: 16 }} />}
                   sx={{
-                    borderColor: 'rgba(255,255,255,0.3)',
-                    color: '#fff',
-                    '&:hover': { borderColor: '#fff', bgcolor: 'rgba(255,255,255,0.1)' },
+                    borderColor: 'rgba(239,68,68,0.4)',
+                    color: '#fca5a5',
+                    '&:hover': { borderColor: '#ef4444', bgcolor: 'rgba(239,68,68,0.08)' },
                   }}
                 >
-                  Start Outreach
+                  Force Stop
                 </Button>
-                {activeRun && (
-                  <>
-                    <Button
-                      variant="outlined"
-                      onClick={() => stopRun(activeRun.id)}
-                      startIcon={<Stop />}
-                      sx={{
-                        borderColor: 'rgba(255,255,255,0.3)',
-                        color: '#fff',
-                        '&:hover': { borderColor: '#fff', bgcolor: 'rgba(255,255,255,0.1)' },
-                      }}
-                    >
-                      Stop
-                    </Button>
-                    <Button
-                      variant="outlined"
-                      onClick={() => killRun(activeRun.id)}
-                      startIcon={<PowerSettingsNew />}
-                      sx={{
-                        borderColor: 'rgba(239,68,68,0.5)',
-                        color: '#fca5a5',
-                        '&:hover': { borderColor: '#ef4444', bgcolor: 'rgba(239,68,68,0.1)' },
-                      }}
-                    >
-                      Force Stop
-                    </Button>
-                  </>
-                )}
-              </Stack>
-            </Stack>
-          </Paper>
+              </>
+            )}
+          </Stack>
+        </Stack>
+      </Box>
 
-          <Box>
-            <Typography variant="h6" sx={{ mb: 2, color: '#0f172a' }}>
-              Run History
+      {/* ── Run History ── */}
+      <Box>
+        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
+          <Typography variant="h6" sx={{ color: '#0f172a', fontWeight: 700 }}>
+            Run History
+          </Typography>
+          <Typography sx={{ color: '#94a3b8', fontSize: '0.82rem' }}>
+            {totalCount} total
+          </Typography>
+        </Stack>
+
+        {runs.length === 0 ? (
+          <Box
+            sx={{
+              p: 6,
+              bgcolor: '#fff',
+              border: '1px solid #e2e8f0',
+              textAlign: 'center',
+            }}
+          >
+            <RocketLaunch sx={{ fontSize: 36, color: '#cbd5e1', mb: 1.5 }} />
+            <Typography variant="h6" sx={{ color: '#334155', mb: 0.5 }}>
+              No runs yet
             </Typography>
+            <Typography color="text.secondary" sx={{ mb: 3, fontSize: '0.9rem' }}>
+              Hit "Start Bot" to begin your first automated job application run.
+            </Typography>
+            <Button
+              variant="contained"
+              startIcon={<PlayArrow />}
+              onClick={startRun}
+              disabled={loading}
+            >
+              Start Your First Run
+            </Button>
+          </Box>
+        ) : (
+          <>
+            <TableContainer
+              component={Paper}
+              sx={{ border: '1px solid #e2e8f0', boxShadow: 'none' }}
+            >
+              <Table size="small">
+                <TableHead>
+                  <TableRow sx={{ bgcolor: '#f8fafc' }}>
+                    {['Run', 'Type', 'Status', 'Started', 'Duration', 'Actions'].map((h) => (
+                      <TableCell
+                        key={h}
+                        sx={{
+                          fontWeight: 700,
+                          fontSize: '0.75rem',
+                          color: '#64748b',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.05em',
+                          borderBottom: '2px solid #e2e8f0',
+                          py: 1.5,
+                        }}
+                      >
+                        {h}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {paginatedRuns.map((run) => {
+                    const cfg = statusConfig[run.status] ?? statusConfig.pending
+                    const isActive = run.status === 'running' || run.status === 'stopping'
+                    return (
+                      <TableRow
+                        key={run.id}
+                        hover
+                        sx={{
+                          '&:hover': { bgcolor: '#f8fdf9' },
+                          '&:last-child td': { borderBottom: 0 },
+                        }}
+                      >
+                        {/* Run # */}
+                        <TableCell sx={{ py: 1.75 }}>
+                          <Typography
+                            sx={{
+                              fontFamily: 'monospace',
+                              fontWeight: 700,
+                              color: '#0f172a',
+                              fontSize: '0.85rem',
+                            }}
+                          >
+                            #{run.id}
+                          </Typography>
+                        </TableCell>
 
-            {runs.length === 0 ? (
-              <Paper
-                sx={{
-                  p: 6,
-                  borderRadius: 3,
-                  textAlign: 'center',
-                }}
-              >
-                <Box
-                  sx={{
-                    width: 72,
-                    height: 72,
-                    borderRadius: '50%',
-                    bgcolor: '#f0fdf4',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    mx: 'auto',
-                    mb: 2,
-                  }}
-                >
-                  <RocketLaunch sx={{ fontSize: 32, color: '#16a34a' }} />
-                </Box>
-                <Typography variant="h6" sx={{ color: '#334155', mb: 0.5 }}>
-                  No runs yet
-                </Typography>
-                <Typography color="text.secondary" sx={{ mb: 3 }}>
-                  Hit "Start Bot" above to begin your first automated job application run.
-                </Typography>
-                <Button variant="contained" startIcon={<PlayArrow />} onClick={startRun} disabled={loading}>
-                  Start Your First Run
-                </Button>
-              </Paper>
-            ) : (
-              <Stack spacing={1.5}>
-                {paginatedRuns.map((run) => {
-                  const cfg = statusConfig[run.status] ?? statusConfig.pending
-                  const expanded = expandedRuns[run.id] ?? false
-                  const details = runDetails[run.id]
-                  const currentStep = details?.log_excerpt
-                    ?.split('\n')
-                    .filter((line) => line.startsWith('[STEP]'))
-                    .at(-1)
-                  return (
-                    <Paper
-                      key={run.id}
-                      sx={{
-                        p: 3,
-                        borderRadius: 2.5,
-                        transition: 'all 0.2s',
-                        '&:hover': { boxShadow: '0 4px 16px rgba(0,0,0,0.06)' },
-                      }}
-                    >
-                      <Stack spacing={1.5}>
-                        <Stack
-                          direction={{ xs: 'column', sm: 'row' }}
-                          justifyContent="space-between"
-                          alignItems={{ sm: 'center' }}
-                          spacing={1.5}
-                        >
-                          <Stack direction="row" alignItems="center" spacing={2}>
-                            <Box
-                              sx={{
-                                width: 40,
-                                height: 40,
-                                borderRadius: 2,
-                                bgcolor: '#f0fdf4',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                color: '#16a34a',
-                                fontWeight: 800,
-                                fontSize: '0.85rem',
-                              }}
-                            >
-                              #{run.id}
-                            </Box>
-                            <Stack spacing={0.25}>
-                              <Typography fontWeight={600} sx={{ color: '#0f172a' }}>
-                                Run #{run.id}
-                              </Typography>
-                              <Typography fontSize="0.8rem" color="text.secondary" sx={{ textTransform: 'capitalize' }}>
-                                {run.run_type || 'apply'} run
-                              </Typography>
-                              <Typography fontSize="0.8rem" color="text.secondary">
-                                Started {new Date(run.started_at).toLocaleString()}
-                              </Typography>
-                              {run.finished_at && (
-                                <Typography fontSize="0.8rem" color="text.secondary">
-                                  Finished {new Date(run.finished_at).toLocaleString()}
-                                </Typography>
-                              )}
-                            </Stack>
-                          </Stack>
+                        {/* Type */}
+                        <TableCell>
+                          <Chip
+                            label={run.run_type ?? 'apply'}
+                            size="small"
+                            variant="outlined"
+                            sx={{
+                              fontSize: '0.72rem',
+                              textTransform: 'capitalize',
+                              borderColor: '#d1d5db',
+                              color: '#475569',
+                              height: 22,
+                            }}
+                          />
+                        </TableCell>
 
-                          <Stack direction="row" spacing={1.5} alignItems="center">
+                        {/* Status */}
+                        <TableCell>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                            {isActive && (
+                              <Box
+                                sx={{
+                                  width: 6,
+                                  height: 6,
+                                  borderRadius: '50%',
+                                  bgcolor: '#4ade80',
+                                  boxShadow: '0 0 6px #4ade80',
+                                  flexShrink: 0,
+                                }}
+                              />
+                            )}
                             <Chip
                               label={cfg.label}
                               color={cfg.color}
                               size="small"
-                              icon={cfg.icon}
                               variant="outlined"
-                              sx={{ fontWeight: 600, textTransform: 'capitalize' }}
+                              sx={{
+                                fontSize: '0.72rem',
+                                fontWeight: 600,
+                                textTransform: 'capitalize',
+                                height: 22,
+                              }}
                             />
-                            {(run.status === 'running' || run.status === 'stopping') && (
-                              <Stack direction="row" spacing={0.5}>
+                          </Box>
+                        </TableCell>
+
+                        {/* Started */}
+                        <TableCell>
+                          <Typography sx={{ fontSize: '0.8rem', color: '#475569' }}>
+                            {new Date(run.started_at).toLocaleString(undefined, {
+                              month: 'short', day: 'numeric',
+                              hour: '2-digit', minute: '2-digit',
+                            })}
+                          </Typography>
+                        </TableCell>
+
+                        {/* Duration */}
+                        <TableCell>
+                          <Typography sx={{ fontSize: '0.8rem', color: '#64748b', fontVariantNumeric: 'tabular-nums' }}>
+                            {getDuration(run)}
+                          </Typography>
+                        </TableCell>
+
+                        {/* Actions */}
+                        <TableCell>
+                          <Stack direction="row" spacing={0.75} alignItems="center">
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              startIcon={<Terminal sx={{ fontSize: 13 }} />}
+                              onClick={() => openLogs(run.id)}
+                              sx={{
+                                fontSize: '0.72rem',
+                                py: 0.4,
+                                px: 1,
+                                minWidth: 0,
+                                borderColor: '#d1d5db',
+                                color: '#374151',
+                                '&:hover': { borderColor: '#16a34a', color: '#16a34a', bgcolor: 'transparent' },
+                              }}
+                            >
+                              Logs
+                            </Button>
+                            {isActive && (
+                              <>
                                 <IconButton
                                   size="small"
                                   onClick={() => stopRun(run.id)}
-                                  title="Stop"
+                                  title="Stop gracefully"
+                                  sx={{ color: '#f59e0b', p: 0.5 }}
                                 >
-                                  <Stop sx={{ fontSize: 18, color: '#f59e0b' }} />
+                                  <Stop sx={{ fontSize: 16 }} />
                                 </IconButton>
-                                <IconButton size="small" onClick={() => killRun(run.id)} title="Force stop">
-                                  <PowerSettingsNew sx={{ fontSize: 18, color: '#ef4444' }} />
+                                <IconButton
+                                  size="small"
+                                  onClick={() => killRun(run.id)}
+                                  title="Force stop"
+                                  sx={{ color: '#ef4444', p: 0.5 }}
+                                >
+                                  <PowerSettingsNew sx={{ fontSize: 16 }} />
                                 </IconButton>
-                              </Stack>
+                              </>
                             )}
-                            <Button
-                              size="small"
-                              variant="text"
-                              onClick={() => toggleRun(run.id)}
-                              endIcon={expanded ? <ExpandLess /> : <ExpandMore />}
-                            >
-                              {expanded ? 'Hide logs' : 'Show logs'}
-                            </Button>
                           </Stack>
-                        </Stack>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            </TableContainer>
 
-                        {run.error_message && (
-                          <Typography fontSize="0.85rem" sx={{ color: '#ef4444' }}>
-                            {run.error_message}
-                          </Typography>
-                        )}
-
-                        <Collapse in={expanded}>
-                          <Divider sx={{ my: 1.5 }} />
-                          {currentStep && (
-                            <Typography variant="subtitle2" sx={{ mb: 1, color: '#15803d', fontWeight: 700 }}>
-                              Current step: {currentStep.replace('[STEP] ', '')}
-                            </Typography>
-                          )}
-                          <Typography variant="subtitle2" sx={{ mb: 1, color: '#334155' }}>
-                            Bot logs
-                          </Typography>
-                          <Box
-                            sx={{
-                              p: 2,
-                              borderRadius: 2,
-                              bgcolor: '#0f172a',
-                              color: '#e2e8f0',
-                              fontFamily: 'monospace',
-                              fontSize: '0.8rem',
-                              whiteSpace: 'pre-wrap',
-                              wordBreak: 'break-word',
-                              maxHeight: 320,
-                              overflowY: 'auto',
-                            }}
-                          >
-                            {details ? details.log_excerpt || 'No logs captured for this run yet.' : 'Loading logs...'}
-                          </Box>
-                        </Collapse>
-                      </Stack>
-                    </Paper>
-                  )
-                })}
-                {totalPages > 1 && (
-                  <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
-                    <Pagination
-                      count={totalPages}
-                      page={currentPage}
-                      onChange={(_, page) => setRunsPage(page)}
-                      color="primary"
-                      shape="rounded"
-                    />
-                  </Box>
-                )}
-              </Stack>
+            {totalPages > 1 && (
+              <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
+                <Pagination
+                  count={totalPages}
+                  page={currentPage}
+                  onChange={(_, page) => setRunsPage(page)}
+                  color="primary"
+                  shape="rounded"
+                  size="small"
+                />
+              </Box>
             )}
-          </Box>
-        </Stack>
-      </Container>
-      <Dialog open={outreachDialogOpen} onClose={() => setOutreachDialogOpen(false)} fullWidth maxWidth="sm">
-        <DialogTitle>Start Outreach</DialogTitle>
-        <DialogContent sx={{ pt: 2 }}>
-          <Stack spacing={2} sx={{ mt: 1 }}>
+          </>
+        )}
+      </Box>
+
+      {/* ── Terminal log dialog ── */}
+      <TerminalLogDialog
+        open={logDialogRunId !== null}
+        onClose={() => setLogDialogRunId(null)}
+        run={logDialogRun}
+        details={logDialogDetails}
+      />
+
+      {/* ── Start outreach dialog ── */}
+      <Dialog
+        open={outreachDialogOpen}
+        onClose={() => setOutreachDialogOpen(false)}
+        fullWidth
+        maxWidth="sm"
+        PaperProps={{ sx: { borderRadius: '5px' } }}
+      >
+        <Box
+          sx={{
+            px: 3,
+            py: 2.5,
+            borderBottom: '1px solid #e2e8f0',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <Typography variant="h6" fontWeight={700}>
+            Start Outreach
+          </Typography>
+          <IconButton size="small" onClick={() => setOutreachDialogOpen(false)} sx={{ color: '#94a3b8' }}>
+            <Close sx={{ fontSize: 18 }} />
+          </IconButton>
+        </Box>
+
+        <Box sx={{ p: 3 }}>
+          <Stack spacing={2.5}>
             <TextField
               label="Role"
               value={outreachDraft.role}
-              onChange={(event) => setOutreachDraft((current) => ({ ...current, role: event.target.value }))}
+              onChange={(e) => setOutreachDraft((c) => ({ ...c, role: e.target.value }))}
               required
               fullWidth
+              size="small"
             />
             <TextField
               label="Company"
               value={outreachDraft.company}
-              onChange={(event) => setOutreachDraft((current) => ({ ...current, company: event.target.value }))}
-              helperText="Optional. If provided, the bot will focus on recruiters from this company."
+              onChange={(e) => setOutreachDraft((c) => ({ ...c, company: e.target.value }))}
+              helperText="Optional. Focus the bot on recruiters from this company."
               fullWidth
+              size="small"
             />
             <TextField
               label="Recruiter search context"
               value={outreachDraft.recruiter_search_context}
-              onChange={(event) =>
-                setOutreachDraft((current) => ({ ...current, recruiter_search_context: event.target.value }))
-              }
-              helperText="Optional context such as technical recruiter, hiring manager, entry-level hiring."
+              onChange={(e) => setOutreachDraft((c) => ({ ...c, recruiter_search_context: e.target.value }))}
+              helperText="e.g. technical recruiter, hiring manager, entry-level hiring"
               fullWidth
+              size="small"
             />
             <TextField
               label={outreachDraft.use_ai_for_outreach ? 'Message context for AI' : 'Exact message content'}
               value={outreachDraft.message_content}
-              onChange={(event) => setOutreachDraft((current) => ({ ...current, message_content: event.target.value }))}
+              onChange={(e) => setOutreachDraft((c) => ({ ...c, message_content: e.target.value }))}
               multiline
-              minRows={6}
+              minRows={5}
               helperText={
                 outreachDraft.use_ai_for_outreach
-                  ? 'AI will refine this context into the message that gets sent.'
+                  ? 'AI will refine this into the message that gets sent.'
                   : 'This exact content will be sent without AI rewriting.'
               }
               fullWidth
             />
-            <Stack direction="row" justifyContent="space-between" alignItems="center">
-              <Typography sx={{ color: '#0f172a', fontWeight: 600 }}>Attach default resume</Typography>
-              <Switch
-                checked={outreachDraft.attach_default_resume}
-                onChange={(event) =>
-                  setOutreachDraft((current) => ({ ...current, attach_default_resume: event.target.checked }))
-                }
-              />
-            </Stack>
-            <Stack direction="row" justifyContent="space-between" alignItems="center">
-              <Typography sx={{ color: '#0f172a', fontWeight: 600 }}>Use AI to refine and send</Typography>
-              <Switch
-                checked={outreachDraft.use_ai_for_outreach}
-                onChange={(event) =>
-                  setOutreachDraft((current) => ({ ...current, use_ai_for_outreach: event.target.checked }))
-                }
-              />
-            </Stack>
+
+            <Box
+              sx={{
+                border: '1px solid #e2e8f0',
+                p: 2,
+              }}
+            >
+              <Stack spacing={1.5}>
+                <Stack direction="row" justifyContent="space-between" alignItems="center">
+                  <Box>
+                    <Typography sx={{ fontWeight: 600, fontSize: '0.875rem', color: '#0f172a' }}>
+                      Attach default resume
+                    </Typography>
+                  </Box>
+                  <Switch
+                    checked={outreachDraft.attach_default_resume}
+                    onChange={(e) => setOutreachDraft((c) => ({ ...c, attach_default_resume: e.target.checked }))}
+                    size="small"
+                  />
+                </Stack>
+                <Stack direction="row" justifyContent="space-between" alignItems="center">
+                  <Box>
+                    <Typography sx={{ fontWeight: 600, fontSize: '0.875rem', color: '#0f172a' }}>
+                      Use AI to refine and send
+                    </Typography>
+                  </Box>
+                  <Switch
+                    checked={outreachDraft.use_ai_for_outreach}
+                    onChange={(e) => setOutreachDraft((c) => ({ ...c, use_ai_for_outreach: e.target.checked }))}
+                    size="small"
+                  />
+                </Stack>
+              </Stack>
+            </Box>
           </Stack>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 3 }}>
-          <Button onClick={() => setOutreachDialogOpen(false)}>Cancel</Button>
+        </Box>
+
+        <Box
+          sx={{
+            px: 3,
+            py: 2,
+            borderTop: '1px solid #e2e8f0',
+            display: 'flex',
+            justifyContent: 'flex-end',
+            gap: 1.5,
+          }}
+        >
+          <Button
+            onClick={() => setOutreachDialogOpen(false)}
+            sx={{ color: '#64748b' }}
+          >
+            Cancel
+          </Button>
           <Button
             variant="contained"
             onClick={startOutreachRun}
             disabled={loading || !outreachDraft.role.trim() || !outreachDraft.message_content.trim()}
           >
-            {loading ? 'Starting...' : 'Start Outreach'}
+            {loading ? 'Starting…' : 'Start Outreach'}
           </Button>
-        </DialogActions>
+        </Box>
       </Dialog>
     </Box>
   )

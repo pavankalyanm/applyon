@@ -42,12 +42,12 @@ const theme = createTheme({
     h6: { fontWeight: 600 },
     button: { fontWeight: 600, textTransform: 'none' },
   },
-  shape: { borderRadius: 12 },
+  shape: { borderRadius: 5 },
   components: {
     MuiButton: {
       styleOverrides: {
         root: {
-          borderRadius: 10,
+          borderRadius: '5px',
           padding: '10px 24px',
           fontSize: '0.95rem',
           boxShadow: 'none',
@@ -76,6 +76,7 @@ const theme = createTheme({
     MuiPaper: {
       styleOverrides: {
         root: {
+          borderRadius: '5px',
           boxShadow: '0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.06)',
           border: '1px solid #e2e8f0',
         },
@@ -88,13 +89,23 @@ const theme = createTheme({
       styleOverrides: {
         root: {
           '& .MuiOutlinedInput-root': {
-            borderRadius: 10,
+            borderRadius: '5px',
             '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
               borderColor: '#16a34a',
               borderWidth: 2,
             },
           },
         },
+      },
+    },
+    MuiOutlinedInput: {
+      styleOverrides: {
+        root: { borderRadius: '5px' },
+      },
+    },
+    MuiSelect: {
+      styleOverrides: {
+        outlined: { borderRadius: '5px' },
       },
     },
     MuiTab: {
@@ -116,12 +127,22 @@ const theme = createTheme({
     },
     MuiAlert: {
       styleOverrides: {
-        root: { borderRadius: 10 },
+        root: { borderRadius: '5px' },
       },
     },
     MuiChip: {
       styleOverrides: {
-        root: { fontWeight: 500 },
+        root: { borderRadius: '5px', fontWeight: 500 },
+      },
+    },
+    MuiDialog: {
+      styleOverrides: {
+        paper: { borderRadius: '5px' },
+      },
+    },
+    MuiToggleButton: {
+      styleOverrides: {
+        root: { borderRadius: '5px' },
       },
     },
   },

@@ -178,7 +178,7 @@ export function OnboardingWizard() {
           <Box
             sx={{
               bgcolor: '#fff',
-              borderRadius: 4,
+              borderRadius: '5px',
               border: '1px solid #e2e8f0',
               p: { xs: 3, md: 5 },
               boxShadow: '0 2px 12px rgba(0,0,0,0.03)',

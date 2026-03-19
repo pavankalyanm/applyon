@@ -178,7 +178,7 @@ export function LandingPage() {
               sx={{
                 width: 38,
                 height: 38,
-                borderRadius: 2.5,
+                borderRadius: '5px',
                 display: 'grid',
                 placeItems: 'center',
                 color: '#fff',
@@ -206,7 +206,7 @@ export function LandingPage() {
               endIcon={<ArrowForward />}
               sx={{
                 px: 2.5,
-                borderRadius: 999,
+                borderRadius: '5px',
                 fontWeight: 800,
                 background: 'linear-gradient(135deg, #14532d 0%, #16a34a 60%, #22c55e 100%)',
                 boxShadow: '0 18px 40px rgba(22,163,74,0.24)',
@@ -322,7 +322,7 @@ export function LandingPage() {
                     alignSelf: 'flex-start',
                     px: 1,
                     height: 38,
-                    borderRadius: 999,
+                    borderRadius: '5px',
                     bgcolor: 'rgba(255,255,255,0.72)',
                     backdropFilter: 'blur(12px)',
                     border: '1px solid rgba(15,23,42,0.08)',
@@ -379,7 +379,7 @@ export function LandingPage() {
                     sx={{
                       px: 4,
                       py: 1.6,
-                      borderRadius: 999,
+                      borderRadius: '5px',
                       fontWeight: 800,
                       background: 'linear-gradient(135deg, #14532d 0%, #16a34a 60%, #22c55e 100%)',
                       boxShadow: '0 20px 44px rgba(22,163,74,0.28)',
@@ -394,7 +394,7 @@ export function LandingPage() {
                     sx={{
                       px: 4,
                       py: 1.6,
-                      borderRadius: 999,
+                      borderRadius: '5px',
                       borderColor: 'rgba(15,23,42,0.12)',
                       color: '#0f172a',
                       background: 'rgba(255,255,255,0.68)',
@@ -414,7 +414,7 @@ export function LandingPage() {
                         px: 2.2,
                         py: 1.6,
                         minWidth: 150,
-                        borderRadius: 3,
+                        borderRadius: '5px',
                         bgcolor: 'rgba(255,255,255,0.74)',
                         backdropFilter: 'blur(14px)',
                         border: '1px solid rgba(148,163,184,0.18)',
@@ -442,7 +442,7 @@ export function LandingPage() {
                     position: 'absolute',
                     inset: '14% 10% auto',
                     height: '72%',
-                    borderRadius: 3,
+                    borderRadius: '5px',
                     filter: 'blur(60px)',
                     background: 'linear-gradient(135deg, rgba(22,163,74,0.26), rgba(34,211,238,0.2))',
                     transform: `scale(${1.02 + heroProgress * 0.06})`,
@@ -453,7 +453,7 @@ export function LandingPage() {
                   sx={{
                     position: 'relative',
                     p: { xs: 2.2, md: 2.8 },
-                    borderRadius: 3,
+                    borderRadius: '5px',
                     bgcolor: 'rgba(15,23,42,0.92)',
                     color: '#e2e8f0',
                     border: '1px solid rgba(148,163,184,0.14)',
@@ -477,7 +477,7 @@ export function LandingPage() {
                         sx={{
                           width: 40,
                           height: 40,
-                          borderRadius: 2.5,
+                          borderRadius: '5px',
                           display: 'grid',
                           placeItems: 'center',
                           background: 'linear-gradient(135deg, rgba(22,163,74,0.9), rgba(34,211,238,0.7))',
@@ -515,7 +515,7 @@ export function LandingPage() {
                       elevation={0}
                       sx={{
                         p: 2,
-                        borderRadius: 2,
+                        borderRadius: '5px',
                         bgcolor: 'rgba(15,23,42,0.56)',
                         border: '1px solid rgba(148,163,184,0.12)',
                       }}
@@ -545,7 +545,7 @@ export function LandingPage() {
                             sx={{
                               px: 1.5,
                               py: 1,
-                              borderRadius: 1,
+                              borderRadius: '5px',
                               background: index === 0 ? 'rgba(22,163,74,0.18)' : 'rgba(255,255,255,0.03)',
                               border: '1px solid rgba(148,163,184,0.08)',
                               fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
@@ -589,7 +589,7 @@ export function LandingPage() {
                           elevation={0}
                           sx={{
                             p: 2,
-                            borderRadius: 2,
+                            borderRadius: '5px',
                             background: panel.tone,
                             border: '1px solid rgba(148,163,184,0.12)',
                             color: '#f8fafc',
@@ -698,7 +698,7 @@ export function LandingPage() {
                     elevation={0}
                     sx={{
                       p: 3,
-                      borderRadius: 2,
+                      borderRadius: '5px',
                       height: '100%',
                       bgcolor: 'rgba(255,255,255,0.72)',
                       backdropFilter: 'blur(16px)',
@@ -715,7 +715,7 @@ export function LandingPage() {
                       sx={{
                         width: 52,
                         height: 52,
-                        borderRadius: 3,
+                        borderRadius: '5px',
                         display: 'grid',
                         placeItems: 'center',
                         mb: 2.2,
@@ -740,7 +740,7 @@ export function LandingPage() {
               elevation={0}
               sx={{
                 p: { xs: 3, md: 4 },
-                borderRadius: 2.5,
+                borderRadius: '5px',
                 bgcolor: '#f8fffb',
                 border: '1px solid rgba(22,163,74,0.12)',
                 boxShadow: '0 20px 60px rgba(22,163,74,0.06)',
@@ -792,7 +792,7 @@ export function LandingPage() {
                       elevation={0}
                       sx={{
                         p: 2.2,
-                        borderRadius: 2,
+                        borderRadius: '5px',
                         display: 'grid',
                         gridTemplateColumns: '56px 1fr',
                         gap: 2,
@@ -842,7 +842,7 @@ export function LandingPage() {
                 elevation={0}
                 sx={{
                   p: { xs: 3, md: 4 },
-                  borderRadius: 2.5,
+                  borderRadius: '5px',
                   color: '#f8fafc',
                   background: 'linear-gradient(145deg, #0f172a 0%, #10253d 55%, #14532d 100%)',
                   border: '1px solid rgba(148,163,184,0.12)',
@@ -883,7 +883,7 @@ export function LandingPage() {
                 elevation={0}
                 sx={{
                   p: { xs: 3, md: 4 },
-                  borderRadius: 2.5,
+                  borderRadius: '5px',
                   bgcolor: 'rgba(255,255,255,0.82)',
                   backdropFilter: 'blur(14px)',
                   border: '1px solid rgba(148,163,184,0.16)',
@@ -912,7 +912,7 @@ export function LandingPage() {
                           sx={{
                             width: 38,
                             height: 38,
-                            borderRadius: 2.5,
+                            borderRadius: '5px',
                             display: 'grid',
                             placeItems: 'center',
                             color: '#0f766e',
@@ -951,7 +951,7 @@ export function LandingPage() {
             elevation={0}
             sx={{
               p: { xs: 4, md: 6 },
-              borderRadius: 2.5,
+              borderRadius: '5px',
               textAlign: 'center',
               color: '#fff',
               background: 'linear-gradient(140deg, #14532d 0%, #0f172a 48%, #06b6d4 140%)',
@@ -995,7 +995,7 @@ export function LandingPage() {
                 sx={{
                   px: 4.5,
                   py: 1.6,
-                  borderRadius: 999,
+                  borderRadius: '5px',
                   fontWeight: 900,
                   bgcolor: '#fff',
                   color: '#14532d',

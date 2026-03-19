@@ -19,6 +19,7 @@ import subprocess
 import sys
 import threading
 import time
+import queue
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -32,10 +33,82 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 BOT_DIR = PROJECT_ROOT / "bot"
 BOT_ENTRY = BOT_DIR / "runAiBot.py"
 RUNTIME_DIR = PROJECT_ROOT / "bot_runtime"
+_run_stream_lock = threading.Lock()
+_run_stream_subscribers: dict[int, set[queue.Queue]] = {}
 
 
 def dumps_json(value: object) -> str:
     return json.dumps(value)
+
+
+def _serialize_datetime(value: Optional[datetime]) -> Optional[str]:
+    return value.isoformat() if value else None
+
+
+def _serialize_run_record(run: models.Run) -> dict:
+    return {
+        "id": run.id,
+        "status": run.status,
+        "run_type": run.run_type or "apply",
+        "started_at": _serialize_datetime(run.started_at),
+        "finished_at": _serialize_datetime(run.finished_at),
+        "error_message": run.error_message,
+        "log_excerpt": run.log_excerpt,
+        "config_snapshot": run.config_snapshot,
+    }
+
+
+def subscribe_run_stream(user_id: int) -> queue.Queue:
+    q: queue.Queue = queue.Queue()
+    with _run_stream_lock:
+        _run_stream_subscribers.setdefault(user_id, set()).add(q)
+    return q
+
+
+def unsubscribe_run_stream(user_id: int, q: queue.Queue) -> None:
+    with _run_stream_lock:
+        subscribers = _run_stream_subscribers.get(user_id)
+        if not subscribers:
+            return
+        subscribers.discard(q)
+        if not subscribers:
+            _run_stream_subscribers.pop(user_id, None)
+
+
+def publish_run_stream_event(user_id: int, payload: dict) -> None:
+    with _run_stream_lock:
+        subscribers = list(_run_stream_subscribers.get(user_id, set()))
+    for q in subscribers:
+        try:
+            q.put_nowait(payload)
+        except Exception:
+            continue
+
+
+def publish_run_snapshot(run_id: int, event_type: str = "run_updated") -> None:
+    try:
+        with db.session_scope() as session:
+            run = session.query(models.Run).filter(models.Run.id == run_id).one_or_none()
+            if run is None:
+                return
+            payload = {
+                "type": event_type,
+                "run": _serialize_run_record(run),
+            }
+            publish_run_stream_event(run.user_id, payload)
+    except Exception as exc:
+        print(f"[bot_runner] Failed to publish run snapshot for {run_id}: {exc}", file=sys.stderr)
+
+
+def get_serialized_runs_for_user(user_id: int) -> list[dict]:
+    with db.session_scope() as session:
+        runs = (
+            session.query(models.Run)
+            .filter(models.Run.user_id == user_id)
+            .order_by(models.Run.started_at.desc())
+            .all()
+        )
+        return [_serialize_run_record(run) for run in runs]
 
 
 def _user_runtime_dir(user_id: int) -> Path:
@@ -214,6 +287,7 @@ def _mark_run_failed(run_id: int, error_message: str) -> None:
             run.status = "failed"
             run.error_message = error_message[:2000]
             session.commit()
+        publish_run_snapshot(run_id, "run_failed")
     except Exception as exc:
         print(f"[bot_runner] Failed to mark run {run_id} as failed: {exc}", file=sys.stderr)
 
@@ -226,6 +300,7 @@ def _persist_run_logs(run_id: int, log_lines: list[str]) -> None:
                 return
             run.log_excerpt = "\n".join(log_lines)
             session.commit()
+        publish_run_snapshot(run_id, "run_updated")
     except Exception as exc:
         print(f"[bot_runner] Failed to persist logs for run {run_id}: {exc}", file=sys.stderr)
 
@@ -358,6 +433,7 @@ def _mark_run_stopped_now(run_id: int) -> None:
         run.status = "stopped"
         run.finished_at = datetime.utcnow()
         session.commit()
+    publish_run_snapshot(run_id, "run_stopped")
 
 
 def _validate_backend_config_imports(*, python_exe: str, project_root: Path, env: dict[str, str]) -> tuple[bool, str]:
@@ -617,6 +693,7 @@ def _run_worker(run_id: int) -> None:
             run.started_at = datetime.utcnow()
             run.config_snapshot = json.dumps(snapshot)
             session.commit()
+        publish_run_snapshot(run_id, "run_started")
 
         config_path = _run_config_file(user.id, run_id)
         config_path.write_text(json.dumps(snapshot), encoding="utf-8")
@@ -696,6 +773,7 @@ def _run_worker(run_id: int) -> None:
             if exit_code != 0 and not run.error_message:
                 run.error_message = f"Process exited with code {exit_code}"
             session.commit()
+        publish_run_snapshot(run_id, "run_finished")
 
     except Exception as exc:
         _mark_run_failed(run_id, f"Run worker failed: {exc}")
@@ -710,6 +788,7 @@ def request_stop(run_id: int) -> None:
         run.status = "stopping"
         user_id = run.user_id
         session.commit()
+    publish_run_snapshot(run_id, "run_stopping")
     _run_stop_file(user_id, run_id).write_text("stop", encoding="utf-8")
 
 
@@ -724,6 +803,7 @@ def force_kill(run_id: int) -> None:
         run.killed_at = datetime.utcnow()
         run.status = "stopping"
         session.commit()
+    publish_run_snapshot(run_id, "run_stopping")
     _run_stop_file(user_id, run_id).write_text("stop", encoding="utf-8")
     if not pid:
         _mark_run_stopped_now(run_id)

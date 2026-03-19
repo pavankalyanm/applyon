@@ -5,6 +5,7 @@ import { Dashboard } from './pages/Dashboard'
 import { JobsDashboard } from './pages/JobsDashboard'
 import { OutreachesDashboard } from './pages/OutreachesDashboard'
 import { OnboardingWizard } from './pages/OnboardingWizard'
+import { AppLayout } from './pages/AppLayout'
 import { SettingsLayout } from './pages/settings/SettingsLayout'
 import { SettingsSectionPage } from './pages/settings/SettingsSectionPage'
 
@@ -27,47 +28,30 @@ export default function App() {
           </RequireAuth>
         }
       />
+
+      {/* All authenticated app pages share the sidebar layout */}
       <Route
-        path="/settings"
         element={
           <RequireAuth>
-            <SettingsLayout />
+            <AppLayout />
           </RequireAuth>
         }
       >
-        <Route index element={<Navigate to="personals" replace />} />
-        <Route path="personals" element={<SettingsSectionPage section="personals" />} />
-        <Route path="search" element={<SettingsSectionPage section="search" />} />
-        <Route path="questions" element={<SettingsSectionPage section="questions" />} />
-        <Route path="settings" element={<SettingsSectionPage section="settings" />} />
-        <Route path="resume" element={<SettingsSectionPage section="resume" />} />
-        <Route path="outreach" element={<SettingsSectionPage section="outreach" />} />
-        <Route path="secrets" element={<SettingsSectionPage section="secrets" />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/jobs" element={<JobsDashboard />} />
+        <Route path="/outreaches" element={<OutreachesDashboard />} />
+        <Route path="/settings" element={<SettingsLayout />}>
+          <Route index element={<Navigate to="personals" replace />} />
+          <Route path="personals" element={<SettingsSectionPage section="personals" />} />
+          <Route path="search" element={<SettingsSectionPage section="search" />} />
+          <Route path="questions" element={<SettingsSectionPage section="questions" />} />
+          <Route path="settings" element={<SettingsSectionPage section="settings" />} />
+          <Route path="resume" element={<SettingsSectionPage section="resume" />} />
+          <Route path="outreach" element={<SettingsSectionPage section="outreach" />} />
+          <Route path="secrets" element={<SettingsSectionPage section="secrets" />} />
+        </Route>
       </Route>
-      <Route
-        path="/dashboard"
-        element={
-          <RequireAuth>
-            <Dashboard />
-          </RequireAuth>
-        }
-      />
-      <Route
-        path="/jobs"
-        element={
-          <RequireAuth>
-            <JobsDashboard />
-          </RequireAuth>
-        }
-      />
-      <Route
-        path="/outreaches"
-        element={
-          <RequireAuth>
-            <OutreachesDashboard />
-          </RequireAuth>
-        }
-      />
+
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
