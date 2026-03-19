@@ -90,6 +90,36 @@ export function Dashboard() {
   })
   const runsPerPage = 25
 
+  async function loadResumes() {
+    const resumesResp = await api.get('/resumes')
+    const data = resumesResp.data || {}
+    const items = (data.items as { id: string; label: string }[]) || []
+    setResumes(items)
+    if (!selectedResumeId && data.default_resume_id) {
+      setSelectedResumeId(data.default_resume_id as string)
+    }
+  }
+
+  async function loadOutreachDefaults() {
+    const configResp = await api.get('/config')
+    const outreach = configResp.data?.outreach || {}
+    const search = configResp.data?.search || {}
+    setOutreachDraft((current) => ({
+      role: current.role || outreach.default_role || search.search_terms?.[0] || '',
+      company: current.company || outreach.default_company || '',
+      recruiter_search_context: current.recruiter_search_context || outreach.default_recruiter_search_context || '',
+      message_content: current.message_content || outreach.default_message_content || '',
+      attach_default_resume:
+        current.role || current.message_content || current.company || current.recruiter_search_context
+          ? current.attach_default_resume
+          : Boolean(outreach.attach_default_resume),
+      use_ai_for_outreach:
+        current.message_content || current.role
+          ? current.use_ai_for_outreach
+          : Boolean(outreach.use_ai_for_outreach),
+    }))
+  }
+
   async function refreshExpandedRunDetails(runIds?: number[]) {
     const ids = runIds ?? Object.entries(expandedRuns)
       .filter(([, expanded]) => expanded)
@@ -107,37 +137,20 @@ export function Dashboard() {
     })
   }
 
-  async function refresh() {
+  async function refreshRuns() {
     try {
       const resp = await api.get('/runs')
       setRuns(resp.data)
       setRunsPage(1)
       await refreshExpandedRunDetails()
-      // also refresh resumes so the selector stays in sync
-      const resumesResp = await api.get('/resumes')
-      const data = resumesResp.data || {}
-      const items = (data.items as { id: string; label: string }[]) || []
-      setResumes(items)
-      if (!selectedResumeId && data.default_resume_id) {
-        setSelectedResumeId(data.default_resume_id as string)
-      }
-      const configResp = await api.get('/config')
-      const outreach = configResp.data?.outreach || {}
-      const search = configResp.data?.search || {}
-      setOutreachDraft((current) => ({
-        role: current.role || outreach.default_role || search.search_terms?.[0] || '',
-        company: current.company || outreach.default_company || '',
-        recruiter_search_context: current.recruiter_search_context || outreach.default_recruiter_search_context || '',
-        message_content: current.message_content || outreach.default_message_content || '',
-        attach_default_resume:
-          current.role || current.message_content || current.company || current.recruiter_search_context
-            ? current.attach_default_resume
-            : Boolean(outreach.attach_default_resume),
-        use_ai_for_outreach:
-          current.message_content || current.role
-            ? current.use_ai_for_outreach
-            : Boolean(outreach.use_ai_for_outreach),
-      }))
+    } catch {
+      // silent
+    }
+  }
+
+  async function refreshAll() {
+    try {
+      await Promise.all([refreshRuns(), loadResumes(), loadOutreachDefaults()])
     } catch {
       // silent
     }
@@ -152,7 +165,7 @@ export function Dashboard() {
         await api.post(`/resumes/${selectedResumeId}/default`)
       }
       await api.post('/runs')
-      await refresh()
+      await Promise.all([refreshRuns(), loadResumes()])
     } catch (e: any) {
       setError(e?.response?.data?.detail ?? 'Failed to start run')
     } finally {
@@ -162,12 +175,12 @@ export function Dashboard() {
 
   async function stopRun(runId: number) {
     await api.post(`/runs/${runId}/stop`)
-    await refresh()
+    await refreshRuns()
   }
 
   async function killRun(runId: number) {
     await api.post(`/runs/${runId}/kill`)
-    await refresh()
+    await refreshRuns()
   }
 
   async function toggleRun(runId: number) {
@@ -185,10 +198,18 @@ export function Dashboard() {
   }
 
   useEffect(() => {
-    void refresh()
-    const interval = setInterval(refresh, 2000)
-    return () => clearInterval(interval)
+    void refreshAll()
   }, [])
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const hasActiveRun = runs.some((run) => run.status === 'running' || run.status === 'stopping')
+      if (document.visibilityState === 'visible' && hasActiveRun) {
+        void refreshRuns()
+      }
+    }, 4000)
+    return () => clearInterval(interval)
+  }, [runs])
 
   const latest = runs[0]
   const activeRun = runs.find((run) => run.status === 'running' || run.status === 'stopping')
@@ -208,7 +229,7 @@ export function Dashboard() {
         run_input: outreachDraft,
       })
       setOutreachDialogOpen(false)
-      await refresh()
+      await refreshRuns()
     } catch (e: any) {
       setError(e?.response?.data?.detail ?? 'Failed to start outreach run')
     } finally {
@@ -275,7 +296,7 @@ export function Dashboard() {
             <Button
               variant="contained"
               startIcon={<Refresh sx={{ fontSize: 18 }} />}
-              onClick={refresh}
+              onClick={refreshAll}
               sx={{
                 bgcolor: '#f0fdf4',
                 color: '#16a34a',

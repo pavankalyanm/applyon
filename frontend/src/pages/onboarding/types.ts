@@ -84,6 +84,7 @@ export type SettingsConfig = {
   keep_screen_awake: boolean
   stealth_mode: boolean
   showAiErrorAlerts: boolean
+  show_bot_cursor: boolean
 }
 
 export type ResumeConfig = {
@@ -255,6 +256,7 @@ export const defaultSettings: SettingsConfig = {
   keep_screen_awake: true,
   stealth_mode: true,
   showAiErrorAlerts: false,
+  show_bot_cursor: true,
 }
 
 export const defaultResume: ResumeConfig = {

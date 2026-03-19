@@ -219,6 +219,7 @@ def validate_settings() -> None | ValueError | TypeError:
     check_boolean(smooth_scroll, "smooth_scroll")
     check_boolean(keep_screen_awake, "keep_screen_awake")
     check_boolean(stealth_mode, "stealth_mode")
+    check_boolean(show_bot_cursor, "show_bot_cursor")
 
 
 def validate_outreach() -> None | ValueError | TypeError:

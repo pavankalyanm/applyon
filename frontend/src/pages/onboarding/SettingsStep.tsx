@@ -162,8 +162,16 @@ export function SettingsStep({ value, onChange }: Props) {
           }
           label="Show alerts when AI API errors occur"
         />
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={value.show_bot_cursor}
+              onChange={(e) => update('show_bot_cursor', e.target.checked)}
+            />
+          }
+          label="Show a visual bot cursor for clicks, scrolling, and typing"
+        />
       </FormGroup>
     </Stack>
   )
 }
-

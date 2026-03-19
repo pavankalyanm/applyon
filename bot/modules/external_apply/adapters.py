@@ -11,6 +11,7 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.remote.webelement import WebElement
 
 from modules.helpers import buffer, print_lg, print_step, show_confirm
+from modules.visual_cursor import ensure_visual_cursor, show_cursor_click, show_cursor_scroll, show_cursor_typing
 from modules.external_apply.answer_engine import (
     coerce_text_value,
     is_resume_upload_label,
@@ -112,6 +113,7 @@ class BaseExternalApplyAdapter:
             if label and not is_resume_upload_label(label) and "resume" not in input_name and "resume" not in input_id and "cv" not in input_name and "cv" not in input_id:
                 continue
             try:
+                show_cursor_typing(ctx.driver, file_input, "Uploading resume")
                 file_input.send_keys(ctx.resume_path)
                 buffer(ctx.click_gap)
                 return ctx.resume_path.split("/")[-1]
@@ -655,10 +657,12 @@ class BaseExternalApplyAdapter:
 
     def _open_combobox_options(self, driver, combo: WebElement) -> list[str]:
         try:
+            show_cursor_scroll(driver, combo, "Opening options")
             driver.execute_script("arguments[0].scrollIntoView({block:'center'});", combo)
         except Exception:
             pass
         try:
+            show_cursor_click(driver, combo, "Opening options")
             combo.click()
             buffer(1)
         except Exception:
@@ -697,10 +701,12 @@ class BaseExternalApplyAdapter:
     def _select_combobox_value(self, driver, combo: WebElement, answer: str) -> bool:
         normalized_answer = normalize_label(answer)
         try:
+            show_cursor_scroll(driver, combo, "Scrolling to field")
             driver.execute_script("arguments[0].scrollIntoView({block:'center'});", combo)
         except Exception:
             pass
         try:
+            show_cursor_click(driver, combo, f"Selecting {answer}")
             combo.click()
             buffer(1)
         except Exception:
@@ -717,6 +723,7 @@ class BaseExternalApplyAdapter:
         except Exception:
             pass
         try:
+            show_cursor_typing(driver, combo, f"Typing {answer}")
             combo.send_keys(answer)
             buffer(1)
         except Exception:
@@ -727,6 +734,7 @@ class BaseExternalApplyAdapter:
             option_text = normalize_label(_safe_text(option))
             if option_text == normalized_answer or normalized_answer in option_text or option_text in normalized_answer:
                 try:
+                    show_cursor_click(driver, option, f"Choosing {answer}")
                     option.click()
                     buffer(1)
                     return True
@@ -749,12 +757,14 @@ class BaseExternalApplyAdapter:
         normalized_answer = normalize_label(answer)
         for option in options:
             if normalize_label(option.text) == normalized_answer:
+                show_cursor_click(getattr(select, "parent", None), option, f"Selecting {answer}")
                 option.click()
                 buffer(1)
                 return
         for option in options:
             option_text = normalize_label(option.text)
             if normalized_answer in option_text or option_text in normalized_answer:
+                show_cursor_click(getattr(select, "parent", None), option, f"Selecting {answer}")
                 option.click()
                 buffer(1)
                 return
@@ -764,11 +774,13 @@ class BaseExternalApplyAdapter:
             field.clear()
         except Exception:
             pass
+        show_cursor_typing(getattr(field, "parent", None), field, "Typing answer")
         field.send_keys(answer)
         buffer(1)
 
     def _click_with_label_fallback(self, element: WebElement) -> None:
         try:
+            show_cursor_click(getattr(element, "parent", None), element, "Selecting option")
             element.click()
             buffer(1)
             return
@@ -778,6 +790,7 @@ class BaseExternalApplyAdapter:
         if label:
             try:
                 label_element = element.find_element(By.XPATH, f"//label[normalize-space()='{label}']")
+                show_cursor_click(getattr(label_element, "parent", None), label_element, "Selecting option")
                 label_element.click()
                 buffer(1)
                 return

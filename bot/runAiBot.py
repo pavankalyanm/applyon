@@ -5,6 +5,7 @@ from modules.clickers_and_finders import *
 from modules.helpers import *
 from modules.open_chrome import *
 from modules.external_apply.adapters import ExternalApplyContext, ExternalApplyResult, detect_adapter
+from modules.visual_cursor import ensure_visual_cursor, show_cursor_click, show_cursor_scroll, show_cursor_typing
 from config.settings import *
 from config.secrets import use_AI, username, password, ai_provider
 from config.search import *
@@ -1089,6 +1090,22 @@ def _extract_first_email(text: str) -> Optional[str]:
     return match.group(0) if match else None
 
 
+def _normalize_linkedin_profile_url(profile_url: str) -> str:
+    cleaned = (profile_url or "").strip()
+    if not cleaned:
+        return ""
+    cleaned = cleaned.split("?", 1)[0].split("#", 1)[0].strip()
+    if cleaned.endswith("/"):
+        cleaned = cleaned[:-1]
+    return cleaned.lower()
+
+
+def _extract_linkedin_profile_id(profile_url: str) -> str:
+    normalized = _normalize_linkedin_profile_url(profile_url)
+    match = re.search(r"/in/([^/]+)", normalized)
+    return match.group(1).strip().lower() if match else ""
+
+
 def _linkedin_people_search_url(role: str, company_filter: str, recruiter_search_context: str) -> str:
     parts = [role.strip()]
     if company_filter.strip():
@@ -1101,6 +1118,7 @@ def _linkedin_people_search_url(role: str, company_filter: str, recruiter_search
 
 
 def _collect_recruiter_candidates(limit: int) -> list[str]:
+    _close_open_message_overlays()
     wait.until(lambda d: d.find_elements(By.XPATH, "//a[contains(@href,'/in/')]"))
     anchors = driver.find_elements(By.XPATH, "//a[contains(@href,'/in/')]")
     candidates: list[str] = []
@@ -1185,12 +1203,15 @@ def _fill_message_box(message: str) -> None:
         raise NoSuchElementException("Could not find LinkedIn message input.")
 
     try:
+        show_cursor_click(driver, textbox, "Opening message")
         textbox.click()
+        show_cursor_typing(driver, textbox, "Typing message")
         textbox.send_keys(Keys.CONTROL + "a")
         textbox.send_keys(message)
     except Exception:
         try:
             textbox.clear()
+            show_cursor_typing(driver, textbox, "Typing message")
             textbox.send_keys(message)
         except Exception as exc:
             raise NoSuchElementException("Could not fill LinkedIn message input.") from exc
@@ -1235,7 +1256,9 @@ def _click_message_send_button() -> bool:
     for xpath in selectors:
         try:
             button = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.XPATH, xpath)))
+            show_cursor_scroll(driver, button, "Preparing to send")
             driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", button)
+            show_cursor_click(driver, button, "Sending outreach")
             button.click()
             return True
         except Exception:
@@ -1250,10 +1273,42 @@ def _dismiss_message_modal() -> None:
         "//button[contains(@aria-label,'Dismiss')]",
     ]:
         try:
-            driver.find_element(By.XPATH, xpath).click()
+            button = driver.find_element(By.XPATH, xpath)
+            show_cursor_click(driver, button, "Closing message")
+            button.click()
             return
         except Exception:
             continue
+
+
+def _close_open_message_overlays(max_overlays: int = 5) -> None:
+    close_selectors = [
+        "//div[contains(@class,'msg-overlay-conversation-bubble')]//button[contains(@class,'msg-overlay-bubble-header__control') and .//*[contains(@data-test-icon,'close-small')]]",
+        "//div[contains(@class,'msg-overlay-conversation-bubble')]//button[contains(@aria-label,'Close')]",
+        "//button[contains(@aria-label,'Dismiss')]",
+    ]
+    for _ in range(max_overlays):
+        closed = False
+        for xpath in close_selectors:
+            try:
+                buttons = driver.find_elements(By.XPATH, xpath)
+            except Exception:
+                buttons = []
+            for button in buttons:
+                try:
+                    if not button.is_displayed():
+                        continue
+                    show_cursor_click(driver, button, "Closing message")
+                    button.click()
+                    sleep_with_stop(0.5)
+                    closed = True
+                    break
+                except Exception:
+                    continue
+            if closed:
+                break
+        if not closed:
+            return
 
 
 def _attach_outreach_resume_if_needed() -> bool:
@@ -1272,6 +1327,7 @@ def _attach_outreach_resume_if_needed() -> bool:
         try:
             file_input = WebDriverWait(driver, 3).until(EC.presence_of_element_located((By.XPATH, xpath)))
             driver.execute_script("arguments[0].classList.remove('hidden'); arguments[0].style.display='block';", file_input)
+            show_cursor_typing(driver, file_input, "Attaching resume")
             file_input.send_keys(os.path.abspath(default_resume_path))
             sleep_with_stop(2)
             print_step("Attached resume to outreach", os.path.basename(default_resume_path))
@@ -1295,13 +1351,16 @@ def _send_recruiter_outreach(
     global outreach_count, failed_count
     driver.get(profile_url)
     sleep_with_stop(2)
+    ensure_visual_cursor(driver)
     ensure_not_stopping("during recruiter outreach profile review")
+    _close_open_message_overlays()
 
     recruiter_name = _profile_text("//h1")
     recruiter_headline = _profile_text("(//div[contains(@class,'text-body-medium')])[1]")
     recruiter_location = _profile_text("(//span[contains(@class,'text-body-small')])[1]")
     recruiter_company = company_value.strip() or _profile_text("(//section//span[contains(.,'Current company')]/following::span)[1]")
     recruiter_email = _extract_first_email(driver.page_source) if collect_recruiter_email_if_available else None
+    recruiter_member_id = _extract_linkedin_profile_id(profile_url)
 
     emit_outreach_event(
         "outreach_discovered",
@@ -1312,6 +1371,7 @@ def _send_recruiter_outreach(
             "recruiter_location": recruiter_location,
             "recruiter_email": recruiter_email,
             "recruiter_profile_url": profile_url,
+            "recruiter_member_id": recruiter_member_id,
             "role": role_value,
             "company_filter": company_value,
             "search_context": recruiter_search_value,
@@ -1336,8 +1396,10 @@ def _send_recruiter_outreach(
     message_button = _find_primary_profile_action_button("Message")
     if message_button is not None:
         try:
+            show_cursor_scroll(driver, message_button, "Opening message")
             driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", message_button)
             WebDriverWait(driver, 4).until(lambda _driver: message_button.is_displayed() and message_button.is_enabled())
+            show_cursor_click(driver, message_button, "Opening message")
             message_button.click()
             message_opened = True
         except Exception:
@@ -1350,6 +1412,7 @@ def _send_recruiter_outreach(
         ]:
             try:
                 button = WebDriverWait(driver, 2).until(EC.element_to_be_clickable((By.XPATH, xpath)))
+                show_cursor_click(driver, button, "Opening message")
                 button.click()
                 message_opened = True
                 break
@@ -1360,14 +1423,17 @@ def _send_recruiter_outreach(
         connect_button = _find_primary_profile_action_button("Connect")
         if connect_button is not None:
             try:
+                show_cursor_scroll(driver, connect_button, "Opening connect note")
                 driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", connect_button)
                 WebDriverWait(driver, 3).until(lambda _driver: connect_button.is_displayed() and connect_button.is_enabled())
+                show_cursor_click(driver, connect_button, "Opening connect note")
                 connect_button.click()
                 sleep_with_stop(1)
                 try:
                     add_note = WebDriverWait(driver, 3).until(
                         EC.element_to_be_clickable((By.XPATH, "//button[.//span[contains(normalize-space(),'Add a note')]]"))
                     )
+                    show_cursor_click(driver, add_note, "Adding note")
                     add_note.click()
                 except Exception:
                     pass
@@ -1387,6 +1453,7 @@ def _send_recruiter_outreach(
                 "recruiter_location": recruiter_location,
                 "recruiter_email": recruiter_email,
                 "recruiter_profile_url": profile_url,
+                "recruiter_member_id": recruiter_member_id,
                 "role": role_value,
                 "company_filter": company_value,
                 "search_context": recruiter_search_value,
@@ -1429,6 +1496,7 @@ def _send_recruiter_outreach(
                     "recruiter_location": recruiter_location,
                     "recruiter_email": recruiter_email,
                     "recruiter_profile_url": profile_url,
+                    "recruiter_member_id": recruiter_member_id,
                     "role": role_value,
                     "company_filter": company_value,
                     "search_context": recruiter_search_value,
@@ -1457,6 +1525,7 @@ def _send_recruiter_outreach(
                 "recruiter_location": recruiter_location,
                 "recruiter_email": recruiter_email,
                 "recruiter_profile_url": profile_url,
+                "recruiter_member_id": recruiter_member_id,
                 "role": role_value,
                 "company_filter": company_value,
                 "search_context": recruiter_search_value,
@@ -1481,6 +1550,7 @@ def _send_recruiter_outreach(
             "recruiter_location": recruiter_location,
             "recruiter_email": recruiter_email,
             "recruiter_profile_url": profile_url,
+            "recruiter_member_id": recruiter_member_id,
             "role": role_value,
             "company_filter": company_value,
             "search_context": recruiter_search_value,
@@ -1514,15 +1584,48 @@ def run_outreach(total_runs: int) -> int:
         raise ValueError("Outreach message content is required to start an outreach run.")
 
     search_url = _linkedin_people_search_url(role_value, company_value, recruiter_search_value)
+    sent_profile_urls = {
+        _normalize_linkedin_profile_url(url)
+        for url in (globals().get("sent_recruiter_profile_urls") or [])
+        if str(url).strip()
+    }
+    sent_member_ids = {
+        str(value).strip().lower()
+        for value in (globals().get("sent_recruiter_member_ids") or [])
+        if str(value).strip()
+    }
     print_step("Opening recruiter search", search_url)
     driver.get(search_url)
     sleep_with_stop(3)
+    ensure_visual_cursor(driver)
+    _close_open_message_overlays()
     limit = max_outreaches_per_run or 5
     candidates = _collect_recruiter_candidates(max(limit * 3, limit))
     print_lg(f"Found {len(candidates)} recruiter candidates for outreach.")
 
-    for profile_url in candidates[:limit]:
+    for profile_url in candidates:
+        if outreach_count >= limit:
+            break
         ensure_not_stopping("during outreach loop")
+        normalized_profile_url = _normalize_linkedin_profile_url(profile_url)
+        recruiter_member_id = _extract_linkedin_profile_id(profile_url)
+        if normalized_profile_url in sent_profile_urls or (recruiter_member_id and recruiter_member_id in sent_member_ids):
+            print_step("Skipping recruiter", f"Already contacted {profile_url}")
+            emit_outreach_event(
+                "outreach_skipped",
+                {
+                    "recruiter_profile_url": profile_url,
+                    "recruiter_member_id": recruiter_member_id,
+                    "role": role_value,
+                    "company_filter": company_value,
+                    "search_context": recruiter_search_value,
+                    "message_input": message_content_value,
+                    "used_ai": use_ai_value,
+                    "status": "skipped",
+                    "reason": "Recruiter already contacted in a previous outreach",
+                },
+            )
+            continue
         try:
             _send_recruiter_outreach(
                 profile_url=profile_url,

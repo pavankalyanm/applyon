@@ -7,6 +7,7 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.common.action_chains import ActionChains
+from modules.visual_cursor import show_cursor_click, show_cursor_scroll, show_cursor_typing
 
 # Click Functions
 
@@ -27,6 +28,7 @@ def wait_span_click(driver: WebDriver, text: str, time: float = 5.0, click: bool
             if scroll:
                 scroll_to_view(driver, button, scrollTop)
             if click:
+                show_cursor_click(driver, button, f'Clicking {text}')
                 button.click()
                 buffer(click_gap)
             return button
@@ -47,6 +49,7 @@ def multi_sel(driver: WebDriver, texts: list, time: float = 5.0) -> None:
             button = WebDriverWait(driver, time).until(EC.presence_of_element_located(
                 (By.XPATH, './/span[normalize-space(.)="'+text+'"]')))
             scroll_to_view(driver, button)
+            show_cursor_click(driver, button, f'Clicking {text}')
             button.click()
             buffer(click_gap)
         except Exception as e:
@@ -65,6 +68,7 @@ def multi_sel_noWait(driver: WebDriver, texts: list, actions: ActionChains = Non
             button = driver.find_element(
                 By.XPATH, './/span[normalize-space(.)="'+text+'"]')
             scroll_to_view(driver, button)
+            show_cursor_click(driver, button, f'Clicking {text}')
             button.click()
             buffer(click_gap)
         except Exception as e:
@@ -108,8 +112,10 @@ def boolean_button_click(driver: WebDriver, actions: ActionChains, text: str) ->
                 continue
             scroll_to_view(driver, button)
             try:
+                show_cursor_click(driver, button, f'Toggling {text}')
                 button.click()
             except Exception:
+                show_cursor_click(driver, button, f'Toggling {text}')
                 actions.move_to_element(button).click().perform()
             buffer(click_gap)
             return
@@ -136,8 +142,10 @@ def scroll_to_view(driver: WebDriver, element: WebElement, top: bool = False, sm
     - `top` will scroll to the `element` to top of the view.
     '''
     if top:
+        show_cursor_scroll(driver, element, "Jumping to section")
         return driver.execute_script('arguments[0].scrollIntoView();', element)
     behavior = "smooth" if smooth_scroll else "instant"
+    show_cursor_scroll(driver, element, "Scrolling")
     return driver.execute_script('arguments[0].scrollIntoView({block: "center", behavior: "'+behavior+'" });', element)
 
 # Enter input text functions
@@ -150,6 +158,7 @@ def text_input_by_ID(driver: WebDriver, id: str, value: str, time: float = 5.0) 
     '''
     username_field = WebDriverWait(driver, time).until(
         EC.presence_of_element_located((By.ID, id)))
+    show_cursor_typing(driver, username_field, f"Typing into {id}")
     username_field.send_keys(Keys.CONTROL + "a")
     username_field.send_keys(value)
 
@@ -188,6 +197,7 @@ def company_search_click(driver: WebDriver, actions: ActionChains, companyName: 
     wait_span_click(driver, "Add a company", 1)
     search = driver.find_element(
         By.XPATH, "(.//input[@placeholder='Add a company'])[1]")
+    show_cursor_typing(driver, search, f'Searching {companyName}')
     search.send_keys(Keys.CONTROL + "a")
     search.send_keys(companyName)
     buffer(3)
@@ -201,6 +211,7 @@ def text_input(actions: ActionChains, textInputEle: WebElement | bool, value: st
         sleep(1)
         # actions.key_down(Keys.CONTROL).send_keys("a").key_up(Keys.CONTROL).perform()
         textInputEle.clear()
+        show_cursor_typing(getattr(textInputEle, "parent", None), textInputEle, f'Typing {textFieldName}')
         textInputEle.send_keys(value.strip())
         sleep(2)
         actions.send_keys(Keys.ENTER).perform()

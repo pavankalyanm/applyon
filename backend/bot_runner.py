@@ -148,6 +148,39 @@ def _build_run_config_snapshot(user_id: int, run_type: str = "apply", run_input:
                 "selected_resume_path": "",
             }
 
+        sent_profile_urls = [
+            row[0]
+            for row in (
+                session.query(models.OutreachEvent.recruiter_profile_url)
+                .filter(
+                    models.OutreachEvent.user_id == user_id,
+                    models.OutreachEvent.status == "sent",
+                    models.OutreachEvent.recruiter_profile_url.isnot(None),
+                )
+                .distinct()
+                .all()
+            )
+            if row and row[0]
+        ]
+        sent_member_ids = [
+            row[0]
+            for row in (
+                session.query(models.RecruiterContact.linkedin_member_id)
+                .join(
+                    models.OutreachEvent,
+                    models.OutreachEvent.recruiter_contact_id == models.RecruiterContact.id,
+                )
+                .filter(
+                    models.RecruiterContact.user_id == user_id,
+                    models.RecruiterContact.linkedin_member_id.isnot(None),
+                    models.OutreachEvent.status == "sent",
+                )
+                .distinct()
+                .all()
+            )
+            if row and row[0]
+        ]
+
         return {
             "personals": _load_config_section(cfg.personals, "personals"),
             "questions": questions,
@@ -158,6 +191,8 @@ def _build_run_config_snapshot(user_id: int, run_type: str = "apply", run_input:
                 **_load_optional_config_section(cfg.outreach, "outreach"),
                 **(run_input or {}),
                 "run_type": run_type,
+                "sent_recruiter_profile_urls": sent_profile_urls,
+                "sent_recruiter_member_ids": sent_member_ids,
             },
             "other": _load_optional_config_section(cfg.other, "other"),
             "secrets": secrets,
