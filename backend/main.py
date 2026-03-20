@@ -2,6 +2,7 @@ import os
 
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import PlainTextResponse
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -13,6 +14,7 @@ from .routes_runs import router as runs_router
 from .routes_jobs import router as jobs_router
 from .routes_resumes import router as resumes_router
 from .routes_outreaches import router as outreaches_router
+from .routes_agent import router as agent_router
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -41,9 +43,24 @@ app.add_middleware(
 )
 
 
+INSTALL_SCRIPT = Path(__file__).resolve().parents[1] / "install.sh"
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/install", response_class=PlainTextResponse)
+def get_install_script():
+    """Serve the Jobcook install script. Usage: curl -sSL https://yourapp.com/install | sh"""
+    if not INSTALL_SCRIPT.exists():
+        return PlainTextResponse("Install script not found.", status_code=404)
+    return PlainTextResponse(
+        INSTALL_SCRIPT.read_text(),
+        media_type="text/x-shellscript",
+        headers={"Content-Disposition": "inline; filename=install.sh"},
+    )
 
 
 @app.get("/me", response_model=schemas.UserOut)
@@ -57,3 +74,4 @@ app.include_router(runs_router)
 app.include_router(jobs_router)
 app.include_router(resumes_router)
 app.include_router(outreaches_router)
+app.include_router(agent_router)

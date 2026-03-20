@@ -1,32 +1,36 @@
-__pycache__
-.DS_Store
-.vscode
-.idea
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+.venv/
+.jobcook-venv/
+venv/
 
-all excels
-all resumes
-logs
-
-old
-
-secrets.py
-config/personals.py
-.venv
-apikeys.py
-
-# Env / secrets
+# ── Env / secrets ─────────────────────────────────────────────────────────────
 **/.env
-**/.env.*
-!.env.example
+!**/.env.example
 
-# Databases / local state
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+.cursor/
+
+# ── Database / local state ────────────────────────────────────────────────────
 **/*.db
-backend/app.db
-
-# Runtime artifacts
 bot_runtime/
 **/*.stop
+storage/resumes/
+logs/
 
-# Node / frontend build
+# ── Node / frontend ───────────────────────────────────────────────────────────
 **/node_modules/
 frontend/dist/
+
+# ── Bot data ──────────────────────────────────────────────────────────────────
+all excels/
+all resumes/

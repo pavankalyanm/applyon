@@ -4,16 +4,20 @@ import {
   Button,
   Chip,
   Container,
+  IconButton,
   Paper,
   Stack,
   Toolbar,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import {
   ArrowForward,
   AutoAwesome,
   Bolt,
+  Check,
   CheckCircleOutline,
+  ContentCopy,
   DashboardCustomize,
   Lan,
   ManageSearch,
@@ -73,6 +77,62 @@ const commandPanels = [
     title: 'Every application stays visible',
     body: 'Search by role or company, filter the funnel, open job links again, and move opportunities across pipeline stages.',
     tone: 'linear-gradient(135deg, rgba(20,83,45,0.88), rgba(15,23,42,0.92))',
+  },
+]
+
+function CopyableCommand({ command }: { command: string }) {
+  const [copied, setCopied] = useState(false)
+  function copy() {
+    navigator.clipboard.writeText(command)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+  return (
+    <Box
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        bgcolor: '#0f172a',
+        borderRadius: '6px',
+        px: 1.5,
+        py: 1,
+        gap: 1,
+      }}
+    >
+      <Typography
+        component="code"
+        sx={{ fontFamily: 'monospace', fontSize: '0.82rem', color: '#86efac', flexGrow: 1 }}
+      >
+        {command}
+      </Typography>
+      <Tooltip title={copied ? 'Copied!' : 'Copy'} placement="top">
+        <IconButton size="small" onClick={copy} sx={{ color: copied ? '#86efac' : '#64748b', p: 0.5 }}>
+          {copied ? <Check sx={{ fontSize: 15 }} /> : <ContentCopy sx={{ fontSize: 15 }} />}
+        </IconButton>
+      </Tooltip>
+    </Box>
+  )
+}
+
+const installSteps = [
+  {
+    step: '1',
+    title: 'Install the agent',
+    desc: 'One command downloads and installs Jobcook on your machine. Requires Python 3.10+ and Google Chrome.',
+    command: 'curl -sSL https://yourapp.com/install | sh',
+  },
+  {
+    step: '2',
+    title: 'Connect to your account',
+    desc: 'Log in with your account credentials. Your token is saved securely in ~/.jobcook/config.json.',
+    command: 'jobcook login',
+  },
+  {
+    step: '3',
+    title: 'Run in the background',
+    desc: 'Installs as a system service. Starts automatically on login — no terminal needed again.',
+    command: 'jobcook install-service',
   },
 ]
 
@@ -928,6 +988,153 @@ export function LandingPage() {
                 </Stack>
               </Paper>
             </Box>
+          </Stack>
+        </Container>
+      </Box>
+
+      {/* ── Jobcook Install Section ──────────────────────────────────────── */}
+      <Box sx={{ py: { xs: 8, md: 12 }, position: 'relative', overflow: 'hidden' }}>
+        <Container maxWidth="xl">
+          <Stack spacing={6}>
+            <Stack spacing={1.5} alignItems="center" textAlign="center">
+              <Chip
+                icon={<Terminal sx={{ fontSize: '1rem !important' }} />}
+                label="Local Agent"
+                sx={{
+                  alignSelf: 'center',
+                  px: 1,
+                  height: 36,
+                  borderRadius: '5px',
+                  bgcolor: 'rgba(15,23,42,0.06)',
+                  border: '1px solid rgba(15,23,42,0.1)',
+                  color: '#0f172a',
+                  fontWeight: 700,
+                }}
+              />
+              <Typography
+                variant="h2"
+                sx={{
+                  color: '#0f172a',
+                  fontSize: { xs: '2rem', md: '3rem' },
+                  lineHeight: 1.02,
+                  letterSpacing: '-0.05em',
+                  fontWeight: 900,
+                  maxWidth: 640,
+                }}
+              >
+                Get running in{' '}
+                <Box
+                  component="span"
+                  sx={{
+                    background: 'linear-gradient(135deg, #14532d 0%, #16a34a 45%, #06b6d4 100%)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                  }}
+                >
+                  3 commands.
+                </Box>
+              </Typography>
+              <Typography sx={{ color: '#64748b', fontSize: '1.05rem', lineHeight: 1.8, maxWidth: 580 }}>
+                Jobcook runs locally on your machine and connects to your web account. Start, stop, and monitor your bot
+                entirely from the dashboard — no terminal needed after setup.
+              </Typography>
+            </Stack>
+
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' },
+                gap: 2.5,
+              }}
+            >
+              {installSteps.map((item) => (
+                <Paper
+                  key={item.step}
+                  elevation={0}
+                  sx={{
+                    p: 3,
+                    borderRadius: '5px',
+                    bgcolor: 'rgba(255,255,255,0.82)',
+                    backdropFilter: 'blur(14px)',
+                    border: '1px solid rgba(148,163,184,0.18)',
+                    boxShadow: '0 8px 32px rgba(15,23,42,0.05)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 2,
+                  }}
+                >
+                  <Stack direction="row" alignItems="center" spacing={1.5}>
+                    <Box
+                      sx={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: '50%',
+                        display: 'grid',
+                        placeItems: 'center',
+                        color: '#fff',
+                        fontWeight: 900,
+                        fontSize: '1rem',
+                        background: 'linear-gradient(135deg, #14532d, #16a34a)',
+                        boxShadow: '0 8px 20px rgba(22,163,74,0.22)',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {item.step}
+                    </Box>
+                    <Typography sx={{ color: '#0f172a', fontWeight: 800, fontSize: '1.05rem' }}>
+                      {item.title}
+                    </Typography>
+                  </Stack>
+                  <Typography sx={{ color: '#64748b', lineHeight: 1.75, fontSize: '0.93rem' }}>
+                    {item.desc}
+                  </Typography>
+                  <CopyableCommand command={item.command} />
+                </Paper>
+              ))}
+            </Box>
+
+            <Paper
+              elevation={0}
+              sx={{
+                p: { xs: 2.5, md: 3 },
+                borderRadius: '5px',
+                bgcolor: 'rgba(15,23,42,0.03)',
+                border: '1px solid rgba(15,23,42,0.08)',
+                display: 'flex',
+                flexDirection: { xs: 'column', sm: 'row' },
+                alignItems: { sm: 'center' },
+                gap: 2,
+              }}
+            >
+              <Terminal sx={{ color: '#64748b', fontSize: 22, flexShrink: 0 }} />
+              <Box sx={{ flexGrow: 1 }}>
+                <Typography sx={{ color: '#0f172a', fontWeight: 700, mb: 0.3 }}>
+                  Requires: Python 3.10+, Google Chrome
+                </Typography>
+                <Typography sx={{ color: '#64748b', fontSize: '0.9rem' }}>
+                  No PyPI account needed. The script clones the app and installs it directly. After{' '}
+                  <Box component="code" sx={{ fontFamily: 'monospace', bgcolor: 'rgba(0,0,0,0.06)', px: 0.6, borderRadius: '4px' }}>
+                    jobcook install-service
+                  </Box>
+                  {' '}the agent starts automatically on login.
+                </Typography>
+              </Box>
+              <Button
+                variant="contained"
+                size="small"
+                endIcon={<ArrowForward />}
+                onClick={() => navigate('/auth')}
+                sx={{
+                  flexShrink: 0,
+                  borderRadius: '5px',
+                  fontWeight: 800,
+                  background: 'linear-gradient(135deg, #14532d 0%, #16a34a 60%, #22c55e 100%)',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Create Account First
+              </Button>
+            </Paper>
           </Stack>
         </Container>
       </Box>
