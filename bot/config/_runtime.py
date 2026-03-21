@@ -44,7 +44,11 @@ def get_section(section_name: str) -> dict:
     return section
 
 
-def export_section(section_name: str, namespace: dict) -> None:
+def export_section(section_name: str, namespace: dict, defaults: dict | None = None) -> None:
     section = get_section(section_name)
-    namespace.update(section)
-    namespace["__all__"] = sorted(section.keys())
+    if defaults:
+        merged = {**defaults, **section}
+    else:
+        merged = section
+    namespace.update(merged)
+    namespace["__all__"] = sorted(merged.keys())
