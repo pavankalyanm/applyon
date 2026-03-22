@@ -6,6 +6,7 @@ All log/event persistence reuses the existing bot_runner functions.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import sys
 from datetime import datetime
@@ -16,6 +17,9 @@ from . import agent_manager, bot_runner, db, models
 from .auth import get_current_user_from_token
 
 router = APIRouter(tags=["agent"])
+
+# Tracks pending delayed-cleanup tasks per user so they can be cancelled on reconnect
+_cleanup_tasks: dict[int, asyncio.Task] = {}
 
 
 @router.websocket("/agent/ws")
@@ -28,6 +32,11 @@ async def agent_ws(websocket: WebSocket, token: str = Query(...)) -> None:
     except Exception:
         await websocket.close(code=4001)
         return
+
+    # Cancel any pending orphan-cleanup for this user — agent reconnected in time
+    pending = _cleanup_tasks.pop(user_id, None)
+    if pending:
+        pending.cancel()
 
     await websocket.accept()
     agent_manager.register(user_id, websocket)
@@ -115,8 +124,23 @@ async def agent_ws(websocket: WebSocket, token: str = Query(...)) -> None:
     finally:
         agent_manager.unregister(user_id)
         bot_runner.publish_run_stream_event(user_id, {"type": "agent_disconnected"})
-        # Mark any still-running runs as failed
-        _fail_orphaned_runs(user_id)
+        # Schedule orphan cleanup with a 15-second grace period so brief
+        # reconnects (e.g. Chrome extension service worker restarts) don't
+        # incorrectly fail active runs.
+        task = asyncio.create_task(_delayed_fail_orphans(user_id, delay=15))
+        _cleanup_tasks[user_id] = task
+
+
+async def _delayed_fail_orphans(user_id: int, delay: int = 15) -> None:
+    """Wait `delay` seconds, then fail orphaned runs if the agent hasn't reconnected."""
+    try:
+        await asyncio.sleep(delay)
+        if not agent_manager.is_connected(user_id):
+            _fail_orphaned_runs(user_id)
+    except asyncio.CancelledError:
+        pass  # Agent reconnected within the grace window
+    finally:
+        _cleanup_tasks.pop(user_id, None)
 
 
 def _fail_orphaned_runs(user_id: int) -> None:
