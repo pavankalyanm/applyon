@@ -499,6 +499,52 @@ export function Dashboard() {
         </Button>
       </Stack>
 
+      {/* ── Easy Apply notice ── */}
+      <Box
+        sx={{
+          mb: 3,
+          p: 2,
+          borderRadius: 2,
+          background: 'linear-gradient(135deg, rgba(20,83,45,0.06) 0%, rgba(6,182,212,0.06) 100%)',
+          border: '1px solid rgba(22,163,74,0.2)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1.5,
+          flexWrap: 'wrap',
+        }}
+      >
+        <Box sx={{ fontSize: '1.1rem' }}>⚡</Box>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography sx={{ fontSize: '0.875rem', fontWeight: 700, color: '#14532d' }}>
+            Currently optimised for LinkedIn Easy Apply
+          </Typography>
+          <Typography sx={{ fontSize: '0.8rem', color: '#64748b', mt: 0.2 }}>
+            External apply support is rolling out soon. For best results, make sure{' '}
+            <Box component="span" sx={{ fontWeight: 700, color: '#0f172a' }}>"Easy Apply only"</Box>
+            {' '}is checked in your{' '}
+            <Box
+              component="a"
+              href="/settings/search"
+              sx={{ color: '#16a34a', fontWeight: 700, textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}
+            >
+              Search settings
+            </Box>
+            .
+          </Typography>
+        </Box>
+        <Chip
+          label="External Apply — Coming Soon"
+          size="small"
+          sx={{
+            bgcolor: 'rgba(6,182,212,0.1)',
+            color: '#0891b2',
+            fontWeight: 700,
+            fontSize: '0.7rem',
+            border: '1px solid rgba(6,182,212,0.25)',
+          }}
+        />
+      </Box>
+
       {error && (
         <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 3 }}>
           {error}
