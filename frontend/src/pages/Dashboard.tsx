@@ -271,7 +271,7 @@ function TerminalLogDialog({
 
 export function Dashboard() {
   const [runs, setRuns] = useState<Run[]>([])
-  const [tick, setTick] = useState(0)
+  const [_tick, setTick] = useState(0)
   const [runsPage, setRunsPage] = useState(1)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
