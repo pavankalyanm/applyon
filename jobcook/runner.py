@@ -75,8 +75,12 @@ class BotProcess:
         env["BOT_STOP_FILE"] = str(stop_file)
         env["BOT_CONFIG_PATH"] = str(config_file)
         env["PYTHONUNBUFFERED"] = "1"
-        # Jobcook streams output to the web UI — always suppress tkinter dialogs
-        env["BOT_DISABLE_DIALOGS"] = "1"
+        # Suppress tkinter dialogs only when running as a background service (no display).
+        # When running interactively via `jobcook start`, dialogs are shown normally.
+        if os.getenv("BOT_DISABLE_DIALOGS"):
+            env["BOT_DISABLE_DIALOGS"] = "1"
+        else:
+            env.pop("BOT_DISABLE_DIALOGS", None)
         # Unique log file per run to avoid file-locking conflicts
         env["BOT_LOG_FILE"] = str(log_file)
 
