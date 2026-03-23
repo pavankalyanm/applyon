@@ -1,22 +1,31 @@
-import { Box, Drawer, IconButton, Stack, Tooltip, Typography, useMediaQuery, useTheme } from '@mui/material'
+import {
+  BottomNavigation,
+  BottomNavigationAction,
+  Box,
+  Paper,
+  Stack,
+  Tooltip,
+  Typography,
+  useMediaQuery,
+  useTheme,
+} from '@mui/material'
 import {
   Dashboard as DashboardIcon,
   Logout,
-  Menu as MenuIcon,
   RocketLaunch,
   Settings,
   Send,
   Work,
 } from '@mui/icons-material'
-import { useState } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 
 const SIDEBAR_W = 220
+const BOTTOM_NAV_H = 60
 
 const navItems = [
   { key: 'dashboard', label: 'Dashboard', Icon: DashboardIcon, path: '/dashboard' },
   { key: 'jobs', label: 'Jobs', Icon: Work, path: '/jobs' },
-  { key: 'outreaches', label: 'Outreaches', Icon: Send, path: '/outreaches' },
+  { key: 'outreaches', label: 'Outreach', Icon: Send, path: '/outreaches' },
   { key: 'settings', label: 'Settings', Icon: Settings, path: '/settings' },
 ]
 
@@ -90,55 +99,43 @@ function SidebarContent({ onNavigate, onLogout }: { onNavigate: (path: string) =
 
 export function AppLayout() {
   const navigate = useNavigate()
+  const location = useLocation()
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
-  const [drawerOpen, setDrawerOpen] = useState(false)
 
   function logout() {
     localStorage.removeItem('access_token')
     navigate('/auth')
   }
 
-  function handleNavigate(path: string) {
-    navigate(path)
-    setDrawerOpen(false)
-  }
+  // Derive active tab value from current path
+  const activeTab = navItems.find((item) => location.pathname.startsWith(item.path))?.path ?? false
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100dvh' }}>
       {isMobile ? (
         <>
-          {/* Mobile top bar */}
+          {/* ── Mobile: minimal top bar (branding only) ── */}
           <Box
             sx={{
-              position: 'fixed', top: 0, left: 0, right: 0, height: 56,
+              position: 'fixed', top: 0, left: 0, right: 0, height: 48,
               bgcolor: '#0c1410', borderBottom: '1px solid rgba(34,197,94,0.12)',
-              display: 'flex', alignItems: 'center', px: 2, zIndex: 300,
-              gap: 1.5,
+              display: 'flex', alignItems: 'center', px: 2, zIndex: 300, gap: 1.25,
             }}
           >
-            <IconButton onClick={() => setDrawerOpen(true)} sx={{ color: '#22c55e', p: 1 }}>
-              <MenuIcon />
-            </IconButton>
-            <RocketLaunch sx={{ color: '#22c55e', fontSize: 18 }} />
-            <Typography sx={{ fontWeight: 800, color: '#f0fdf4', fontSize: '0.9rem' }}>
+            <RocketLaunch sx={{ color: '#22c55e', fontSize: 17 }} />
+            <Typography sx={{ fontWeight: 800, color: '#f0fdf4', fontSize: '0.88rem', letterSpacing: '-0.01em' }}>
               ApplyFlow AI
             </Typography>
           </Box>
 
-          {/* Mobile drawer */}
-          <Drawer
-            open={drawerOpen}
-            onClose={() => setDrawerOpen(false)}
-            PaperProps={{ sx: { width: SIDEBAR_W, bgcolor: '#0c1410', borderRight: '1px solid rgba(34,197,94,0.12)' } }}
-          >
-            <SidebarContent onNavigate={handleNavigate} onLogout={logout} />
-          </Drawer>
-
-          {/* Main content shifted below top bar */}
+          {/* ── Mobile: main content between top bar and bottom nav ── */}
           <Box
             sx={{
-              mt: '56px', flex: 1, minHeight: 'calc(100vh - 56px)',
+              mt: '48px',
+              pb: `${BOTTOM_NAV_H}px`,
+              flex: 1,
+              minHeight: `calc(100dvh - 48px - ${BOTTOM_NAV_H}px)`,
               bgcolor: '#f7faf8',
               backgroundImage: `
                 linear-gradient(rgba(22,163,74,0.045) 1px, transparent 1px),
@@ -150,6 +147,58 @@ export function AppLayout() {
           >
             <Outlet />
           </Box>
+
+          {/* ── Mobile: bottom navigation ── */}
+          <Paper
+            elevation={0}
+            sx={{
+              position: 'fixed', bottom: 0, left: 0, right: 0,
+              zIndex: 300,
+              borderTop: '1px solid rgba(34,197,94,0.15)',
+              bgcolor: '#0c1410',
+            }}
+          >
+            <BottomNavigation
+              value={activeTab}
+              onChange={(_, path) => {
+                if (path === 'logout') { logout(); return }
+                navigate(path)
+              }}
+              sx={{
+                height: BOTTOM_NAV_H,
+                bgcolor: 'transparent',
+                '& .MuiBottomNavigationAction-root': {
+                  color: '#4a7a5a',
+                  minWidth: 0,
+                  px: 0.5,
+                  gap: 0.4,
+                  '&.Mui-selected': { color: '#22c55e' },
+                },
+                '& .MuiBottomNavigationAction-label': {
+                  fontSize: '0.65rem',
+                  fontWeight: 600,
+                  '&.Mui-selected': { fontSize: '0.65rem' },
+                },
+              }}
+            >
+              {navItems.map(({ label, Icon, path }) => (
+                <BottomNavigationAction
+                  key={path}
+                  label={label}
+                  value={path}
+                  icon={<Icon sx={{ fontSize: 22 }} />}
+                  showLabel
+                />
+              ))}
+              <BottomNavigationAction
+                label="Logout"
+                value="logout"
+                icon={<Logout sx={{ fontSize: 22 }} />}
+                showLabel
+                sx={{ '&.Mui-selected': { color: '#ef4444 !important' }, color: '#4a7a5a' }}
+              />
+            </BottomNavigation>
+          </Paper>
         </>
       ) : (
         <>
