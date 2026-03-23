@@ -13,13 +13,14 @@ import type {
 } from '../onboarding/types'
 
 const sections = [
-  { key: 'personals', label: 'Personals' },
-  { key: 'search',    label: 'Search' },
-  { key: 'questions', label: 'Questions' },
-  { key: 'settings',  label: 'Settings' },
-  { key: 'resume',    label: 'Resume' },
-  { key: 'outreach',  label: 'Outreach' },
-  { key: 'secrets',   label: 'Secrets' },
+  { key: 'personals',        label: 'Personals' },
+  { key: 'search',           label: 'Search' },
+  { key: 'questions',        label: 'Questions' },
+  { key: 'settings',         label: 'Settings' },
+  { key: 'resume',           label: 'Resume' },
+  { key: 'outreach',         label: 'Outreach' },
+  { key: 'secrets',          label: 'Secrets' },
+  { key: 'learned-answers',  label: 'Learned Answers' },
 ] as const
 
 export type SettingsOutletContext = {
@@ -70,7 +71,7 @@ export function SettingsLayout() {
               Settings
             </Typography>
             <Typography color="text.secondary" sx={{ mt: 0.5, fontSize: '0.9rem' }}>
-              Manage all configuration for your AutoApply bot.
+              Manage all configuration for your ApplyFlow AI bot.
             </Typography>
           </Box>
 

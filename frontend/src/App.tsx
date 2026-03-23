@@ -8,6 +8,7 @@ import { OnboardingWizard } from './pages/OnboardingWizard'
 import { AppLayout } from './pages/AppLayout'
 import { SettingsLayout } from './pages/settings/SettingsLayout'
 import { SettingsSectionPage } from './pages/settings/SettingsSectionPage'
+import { LearnedAnswersPage } from './pages/settings/LearnedAnswersPage'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = localStorage.getItem('access_token')
@@ -49,6 +50,7 @@ export default function App() {
           <Route path="resume" element={<SettingsSectionPage section="resume" />} />
           <Route path="outreach" element={<SettingsSectionPage section="outreach" />} />
           <Route path="secrets" element={<SettingsSectionPage section="secrets" />} />
+          <Route path="learned-answers" element={<LearnedAnswersPage />} />
         </Route>
       </Route>
 
