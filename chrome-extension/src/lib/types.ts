@@ -26,3 +26,18 @@ export interface SSEMessage {
   line?: string
   status?: RunStatus
 }
+
+export type JobStatus =
+  | 'scanning' | 'clicking' | 'applying'
+  | 'filling' | 'submitting'
+  | 'applied' | 'skipped' | 'error'
+
+export interface JobEvent {
+  jobNum?: number
+  title?: string
+  company?: string
+  status: JobStatus
+  detail?: string
+  appliedCount?: number
+  maxJobs?: number
+}

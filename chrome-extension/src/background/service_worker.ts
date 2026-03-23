@@ -83,11 +83,14 @@ chrome.runtime.onMessage.addListener((msg: Msg, _sender, sendResponse) => {
     getAuth().then(async (auth) => {
       if (!auth) { sendResponse({ ok: false, error: 'Not authenticated' }); return }
       try {
+        const method = (msg.method as string) || 'GET'
         const res = await fetch(`${auth.backendUrl}${msg.path}`, {
+          method,
           headers: { Authorization: `Bearer ${auth.token}`, 'Content-Type': 'application/json' },
+          body: msg.body ? JSON.stringify(msg.body) : undefined,
         })
-        const data = await res.json()
-        sendResponse({ ok: res.ok, data })
+        const data = await res.json().catch(() => ({}))
+        sendResponse({ ok: res.ok, status: res.status, data })
       } catch (e) {
         sendResponse({ ok: false, error: String(e) })
       }
@@ -133,11 +136,15 @@ chrome.runtime.onMessage.addListener((msg: Msg, _sender, sendResponse) => {
 
   // Log line forwarded from linkedin_bot content script
   if (msg.type === 'BOT_LOG') {
-    if (wsAgent?.readyState === WebSocket.OPEN && currentRunId != null) {
-      wsAgent.send(JSON.stringify({ type: 'log', run_id: currentRunId, line: msg.line }))
-    }
-    // Also forward to popup if connected
+    if (currentRunId != null) safeSend({ type: 'log', run_id: currentRunId, line: msg.line })
     popupPort?.postMessage({ type: 'SSE_MESSAGE', payload: { type: 'log', line: msg.line } })
+    sendResponse({ ok: true })
+    return true
+  }
+
+  // Structured job event from linkedin_bot — forward to popup for live progress UI
+  if (msg.type === 'JOB_EVENT') {
+    popupPort?.postMessage(msg)
     sendResponse({ ok: true })
     return true
   }
@@ -145,9 +152,8 @@ chrome.runtime.onMessage.addListener((msg: Msg, _sender, sendResponse) => {
   // Bot finished
   if (msg.type === 'BOT_FINISHED') {
     const exitCode = msg.success ? 0 : 1
-    if (wsAgent?.readyState === WebSocket.OPEN && currentRunId != null) {
-      wsAgent.send(JSON.stringify({ type: 'run_finished', run_id: currentRunId, exit_code: exitCode }))
-    }
+    if (currentRunId != null) safeSend({ type: 'run_finished', run_id: currentRunId, exit_code: exitCode })
+    chrome.storage.local.remove('applyflowai_bot_context').catch(() => {})
     currentRunId = null
     botTabId = null
     stopRequested = false
@@ -155,6 +161,13 @@ chrome.runtime.onMessage.addListener((msg: Msg, _sender, sendResponse) => {
     return true
   }
 })
+
+// ─── WebSocket safe send (guards against CONNECTING state) ───────────────────
+function safeSend(data: object) {
+  if (wsAgent?.readyState === WebSocket.OPEN) {
+    wsAgent.send(JSON.stringify(data))
+  }
+}
 
 // ─── WebSocket Agent ──────────────────────────────────────────────────────────
 async function connectAgent(auth: AuthState) {
@@ -178,7 +191,7 @@ async function connectAgent(auth: AuthState) {
 
   wsAgent.onopen = () => {
     console.log('[ApplyFlow AI agent] Connected')
-    wsAgent!.send(JSON.stringify({ type: 'agent_ready' }))
+    safeSend({ type: 'agent_ready' })
     broadcastAgentStatus(true)
 
     // Ping every 20 seconds to keep both the WebSocket and the service worker alive.
@@ -187,7 +200,7 @@ async function connectAgent(auth: AuthState) {
     if (keepaliveTimer) clearInterval(keepaliveTimer)
     keepaliveTimer = setInterval(() => {
       if (wsAgent?.readyState === WebSocket.OPEN) {
-        wsAgent.send(JSON.stringify({ type: 'agent_ready' }))
+        safeSend({ type: 'agent_ready' })
       } else {
         clearInterval(keepaliveTimer!)
         keepaliveTimer = null
@@ -214,7 +227,7 @@ async function connectAgent(auth: AuthState) {
     try { msg = JSON.parse(event.data) } catch { return }
 
     if (msg.type === 'ping') {
-      wsAgent?.send(JSON.stringify({ type: 'pong' }))
+      safeSend({ type: 'pong' })
 
     } else if (msg.type === 'start_run') {
       currentRunId = msg.run_id as number
@@ -230,7 +243,7 @@ async function connectAgent(auth: AuthState) {
         chrome.tabs.sendMessage(botTabId, { type: 'STOP_BOT' }).catch(() => {
           chrome.tabs.remove(botTabId!).catch(() => {})
           if (currentRunId != null) {
-            wsAgent?.send(JSON.stringify({ type: 'run_finished', run_id: currentRunId, exit_code: 1 }))
+            safeSend({ type: 'run_finished', run_id: currentRunId, exit_code: 1 })
           }
           currentRunId = null
           botTabId = null
@@ -239,7 +252,7 @@ async function connectAgent(auth: AuthState) {
         // Extension received start_run but never successfully launched a tab.
         // Mark it finished so the run doesn't stay stuck as "running" forever.
         agentLog('[Extension Agent] Stop requested — no active tab, marking run finished')
-        wsAgent?.send(JSON.stringify({ type: 'run_finished', run_id: currentRunId, exit_code: 1 }))
+        safeSend({ type: 'run_finished', run_id: currentRunId, exit_code: 1 })
         currentRunId = null
       }
       // If currentRunId is null the run is server-controlled — backend handles it
@@ -248,7 +261,7 @@ async function connectAgent(auth: AuthState) {
       stopRequested = true
       if (botTabId) chrome.tabs.remove(botTabId).catch(() => {})
       if (currentRunId != null) {
-        wsAgent?.send(JSON.stringify({ type: 'run_finished', run_id: currentRunId, exit_code: 1 }))
+        safeSend({ type: 'run_finished', run_id: currentRunId, exit_code: 1 })
       }
       currentRunId = null
       botTabId = null
@@ -271,8 +284,8 @@ function broadcastAgentStatus(connected: boolean) {
 function agentLog(line: string) {
   const ts = new Date().toISOString().slice(11, 19)
   const msg = `[${ts}] ${line}`
-  if (wsAgent?.readyState === WebSocket.OPEN && currentRunId != null) {
-    wsAgent.send(JSON.stringify({ type: 'log', run_id: currentRunId, line: msg }))
+  if (currentRunId != null) {
+    safeSend({ type: 'log', run_id: currentRunId, line: msg })
   }
   popupPort?.postMessage({ type: 'SSE_MESSAGE', payload: { type: 'log', line: msg } })
 }
@@ -285,12 +298,14 @@ async function launchBotTab(config: Record<string, unknown>) {
   const runId = currentRunId
 
   const searchConfig = (config.search ?? {}) as Record<string, unknown>
-  const keywords = (searchConfig.keywords as string) || ''
-  const location = (searchConfig.location as string) || ''
+  const rawTerms = searchConfig.search_terms
+  const termsList: string[] = Array.isArray(rawTerms) ? rawTerms.filter(Boolean) : rawTerms ? [String(rawTerms)] : []
+  const keywords = termsList.join(' OR ')
+  const location = (searchConfig.search_location as string) || ''
 
   if (!keywords) {
-    agentLog('[Extension Agent] ERROR: No job keywords in config. Configure Search settings first.')
-    wsAgent?.send(JSON.stringify({ type: 'run_finished', run_id: runId, exit_code: 1 }))
+    agentLog('[Extension Agent] ERROR: No job search terms in config. Add keywords in Settings → Search.')
+    safeSend({ type: 'run_finished', run_id: runId, exit_code: 1 })
     currentRunId = null
     return
   }
@@ -304,24 +319,34 @@ async function launchBotTab(config: Record<string, unknown>) {
   agentLog(`[Extension Agent] Searching: "${keywords}" in "${location || 'any location'}"`)
   agentLog(`[Extension Agent] Opening LinkedIn tab — do NOT close it while bot is running`)
 
-  // Store context BEFORE creating the tab so the content script can read it immediately
-  await chrome.storage.session.set({
-    applyflowai_bot_context: {
-      runId,
-      config,
-      token: auth.token,
-      backendUrl: auth.backendUrl,
-    },
-  })
+  const botContext = { runId, config, token: auth.token, backendUrl: auth.backendUrl }
+
+  // Store in chrome.storage.local — accessible from content scripts in ALL Chrome versions
+  // (chrome.storage.session in content scripts requires Chrome 111+)
+  await chrome.storage.local.set({ applyflowai_bot_context: botContext })
 
   try {
     // The linkedin_bot content script auto-injects on linkedin.com/jobs/* via manifest
     const tab = await chrome.tabs.create({ url: searchUrl, active: true })
     botTabId = tab.id ?? null
     agentLog(`[Extension Agent] LinkedIn tab opened (tab ${botTabId}) — automation starting...`)
+
+    // Backup: send START_BOT directly when the tab finishes loading, in case the
+    // content script ran before storage was written (rare but possible race).
+    if (botTabId) {
+      const tabIdForListener = botTabId
+      chrome.tabs.onUpdated.addListener(function onBotTabReady(tabId, info) {
+        if (tabId !== tabIdForListener || info.status !== 'complete') return
+        chrome.tabs.onUpdated.removeListener(onBotTabReady)
+        setTimeout(() => {
+          chrome.tabs.sendMessage(tabIdForListener, { type: 'START_BOT', context: botContext }).catch(() => {})
+        }, 800)
+      })
+    }
   } catch (err) {
     agentLog(`[Extension Agent] ERROR: Failed to open LinkedIn tab: ${err}`)
-    wsAgent?.send(JSON.stringify({ type: 'run_finished', run_id: runId, exit_code: 1 }))
+    safeSend({ type: 'run_finished', run_id: runId, exit_code: 1 })
+    chrome.storage.local.remove('applyflowai_bot_context').catch(() => {})
     currentRunId = null
     botTabId = null
   }

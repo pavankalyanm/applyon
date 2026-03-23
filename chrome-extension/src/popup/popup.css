@@ -204,3 +204,97 @@ body {
   outline: none;
 }
 .settings-panel input:focus { border-color: #16a34a; box-shadow: 0 0 0 2px rgba(22,163,74,0.1); }
+
+/* ── Job Tracker ── */
+.jt-empty-state {
+  font-size: 12px; color: #94a3b8; text-align: center;
+  padding: 14px 8px; font-style: italic;
+}
+
+.jt { display: flex; flex-direction: column; gap: 7px; }
+
+.jt-header {
+  display: flex; align-items: center; justify-content: space-between;
+}
+.jt-title { font-size: 11px; font-weight: 700; color: #374151; text-transform: uppercase; letter-spacing: 0.6px; }
+.jt-count { font-size: 12px; color: #64748b; }
+.jt-count strong { color: #16a34a; font-size: 14px; font-weight: 700; }
+
+.jt-bar-track {
+  height: 5px; background: #e2e8f0; border-radius: 99px; overflow: hidden;
+}
+.jt-bar-fill {
+  height: 100%; background: linear-gradient(90deg, #16a34a, #22c55e);
+  border-radius: 99px; transition: width 0.4s ease;
+}
+
+.jt-action {
+  display: flex; align-items: center; gap: 7px;
+  background: #f0fdf4; border: 1px solid #bbf7d0;
+  border-radius: 7px; padding: 7px 10px;
+}
+.jt-action-text {
+  font-size: 11px; color: #15803d; font-weight: 500;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  flex: 1; min-width: 0;
+}
+
+.jt-list {
+  display: flex; flex-direction: column; gap: 4px;
+  max-height: 200px; overflow-y: auto;
+}
+.jt-list::-webkit-scrollbar { width: 3px; }
+.jt-list::-webkit-scrollbar-track { background: transparent; }
+.jt-list::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 2px; }
+
+.jt-list-empty { font-size: 11px; color: #94a3b8; font-style: italic; padding: 6px 2px; }
+
+.jt-job {
+  background: #fff; border: 1.5px solid #f1f5f9;
+  border-radius: 7px; padding: 7px 9px;
+  transition: border-color 0.15s;
+}
+.jt-job-clicking, .jt-job-applying, .jt-job-filling, .jt-job-submitting {
+  border-color: #bfdbfe; background: #eff6ff;
+}
+.jt-job-applied  { border-color: #bbf7d0; background: #f0fdf4; }
+.jt-job-skipped  { border-color: #f1f5f9; opacity: 0.7; }
+.jt-job-error    { border-color: #fecaca; background: #fff5f5; }
+
+.jt-job-row {
+  display: flex; align-items: center; gap: 6px;
+}
+.jt-job-num {
+  font-size: 10px; font-weight: 700; color: #94a3b8;
+  min-width: 22px; flex-shrink: 0;
+}
+.jt-job-name {
+  font-size: 11px; color: #1e293b; font-weight: 500;
+  flex: 1; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.jt-job-detail {
+  font-size: 10px; color: #3b82f6; margin-top: 3px; padding-left: 28px;
+}
+
+.jt-job-badge {
+  display: flex; align-items: center; gap: 4px;
+  font-size: 10px; font-weight: 600; border-radius: 5px;
+  padding: 2px 7px; flex-shrink: 0;
+}
+.jt-badge-clicking, .jt-badge-applying, .jt-badge-filling, .jt-badge-submitting {
+  background: #dbeafe; color: #1d4ed8;
+}
+.jt-badge-applied  { background: #dcfce7; color: #15803d; }
+.jt-badge-skipped  { background: #f1f5f9; color: #64748b; }
+.jt-badge-error    { background: #fee2e2; color: #dc2626; }
+
+/* Inline spinner for active job badge */
+.jt-spinner {
+  width: 8px; height: 8px; border-radius: 50%;
+  border: 1.5px solid currentColor;
+  border-top-color: transparent;
+  animation: spin 0.7s linear infinite;
+  display: inline-block;
+}
+@keyframes spin { to { transform: rotate(360deg); } }

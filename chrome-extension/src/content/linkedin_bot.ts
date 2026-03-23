@@ -1,7 +1,7 @@
 /**
  * ApplyFlow AI LinkedIn Bot — content script injected into a LinkedIn jobs tab.
- * Reads run context from chrome.storage.session, applies to Easy Apply jobs,
- * and sends logs back to the background service worker.
+ * Context is delivered via chrome.storage.local (primary) or a START_BOT message
+ * (backup), so it works on all Chrome versions without session storage limitations.
  */
 
 interface BotContext {
@@ -14,6 +14,7 @@ interface BotContext {
 interface JobRecord {
   title: string
   company: string
+  location: string
   url: string
   status: 'applied' | 'skipped' | 'error'
 }
@@ -23,58 +24,75 @@ function isCtxValid(): boolean {
   try { return !!chrome.runtime?.id } catch { return false }
 }
 
-// ─── Guard: only run once per tab ──────────────────────────────────────────
-if ((window as Window & { _applyflowBotRunning?: boolean })._applyflowBotRunning) {
-  throw new Error('Bot already running')
-}
-;(window as Window & { _applyflowBotRunning?: boolean })._applyflowBotRunning = true
-
 // ─── Globals ────────────────────────────────────────────────────────────────
 let ctx: BotContext | null = null
 let stopFlag = false
 let appliedCount = 0
+let jobCounter = 0
+let maxJobsForRun = 10
+let botStarted = false
 
-// Listen for stop signal from background
+// Receives START_BOT from service worker (backup path if storage read races)
+let resolveStartBot: ((c: BotContext) => void) | null = null
+
 try {
-  chrome.runtime.onMessage.addListener((msg: { type: string }) => {
+  chrome.runtime.onMessage.addListener((msg: { type: string; context?: BotContext }) => {
     if (msg.type === 'STOP_BOT') {
       stopFlag = true
       log('Stop signal received — finishing current job and halting.')
+    } else if (msg.type === 'START_BOT' && msg.context && !botStarted) {
+      resolveStartBot?.(msg.context)
     }
   })
 } catch { /* context already invalid at inject time */ }
 
+// ─── Wait for context from either storage or direct message ─────────────────
+async function waitForBotContext(): Promise<BotContext | null> {
+  // Path 1: chrome.storage.local (primary — works in all Chrome versions)
+  try {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) await sleep(500)
+      if (!isCtxValid()) return null
+      const stored = await chrome.storage.local.get('applyflowai_bot_context')
+      const c = stored.applyflowai_bot_context as BotContext | null
+      if (c) {
+        // One-use: clear so re-navigations don't re-trigger the bot
+        chrome.storage.local.remove('applyflowai_bot_context').catch(() => {})
+        return c
+      }
+    }
+  } catch { /* fall through to message path */ }
+
+  // Path 2: wait up to 5 s for a START_BOT message from the service worker
+  return new Promise<BotContext | null>((resolve) => {
+    resolveStartBot = resolve
+    setTimeout(() => resolve(null), 5000)
+  })
+}
+
 // ─── Entry point ────────────────────────────────────────────────────────────
 ;(async () => {
-  // Bail immediately if extension context is gone (e.g. reloaded)
   if (!isCtxValid()) return
 
-  // Wait briefly for background to set context (handles race condition on page load)
-  let stored: Record<string, unknown> = {}
-  try {
-    stored = await chrome.storage.session.get('applyflowai_bot_context')
-    if (!stored.applyflowai_bot_context) {
-      await sleep(800)
-      if (!isCtxValid()) return
-      stored = await chrome.storage.session.get('applyflowai_bot_context')
-    }
-  } catch {
-    return // storage not accessible — context invalid
-  }
+  const context = await waitForBotContext()
+  if (!context || botStarted) return  // not a bot-initiated tab
+  botStarted = true
 
-  ctx = stored.applyflowai_bot_context as BotContext | null
-  // Silently exit if this is not a bot-initiated navigation
-  if (!ctx) return
-
+  ctx = context
   const search = (ctx.config.search ?? {}) as Record<string, unknown>
   const settings = (ctx.config.settings ?? {}) as Record<string, unknown>
   const maxApply = Number(settings.max_jobs_per_run ?? 10)
+  maxJobsForRun = maxApply
+
+  const rawTerms = search.search_terms
+  const termsList: string[] = Array.isArray(rawTerms) ? rawTerms.filter(Boolean) : rawTerms ? [String(rawTerms)] : []
+  const searchLocation = String(search.search_location || '')
 
   log(`Bot started — looking for Easy Apply jobs (max ${maxApply})`)
-  log(`Search: "${search.keywords}" in "${search.location}"`)
+  log(`Search terms: ${termsList.join(', ') || '(none)'} | Location: ${searchLocation || 'any'}`)
 
   // Wait for LinkedIn to finish loading
-  await waitFor(() => !!document.querySelector('.jobs-search-results-list, .scaffold-layout__list'), 8000)
+  await waitFor(() => !!document.querySelector('.jobs-search-results-list, .scaffold-layout__list'), 10000)
   await sleep(1500)
 
   await runApplyLoop(maxApply)
@@ -89,384 +107,460 @@ try {
 async function runApplyLoop(maxApply: number) {
   let page = 0
   while (appliedCount < maxApply && !stopFlag) {
+    // Wait for job list items (main bot waits for li[data-occludable-job-id])
+    await waitFor(() => !!document.querySelector('li[data-occludable-job-id]'), 8000)
+    await sleep(1000)
+
     const jobs = collectJobCards()
     if (jobs.length === 0) { log('No job cards found on this page'); break }
 
     log(`Page ${page + 1}: found ${jobs.length} job cards`)
+    emitJobEvent({ status: 'scanning', detail: `Page ${page + 1} — found ${jobs.length} jobs` })
 
     for (const card of jobs) {
       if (stopFlag || appliedCount >= maxApply) break
       await processJobCard(card)
-      await sleep(800 + Math.random() * 600)
+      await sleep(1000 + Math.random() * 800)
     }
 
-    // Try to go to next page
     const moved = await goToNextPage()
     if (!moved) break
     page++
-    await sleep(2000)
+    await sleep(3000)
   }
 }
 
+// Main bot uses li[data-occludable-job-id] — the most reliable selector
 function collectJobCards(): HTMLElement[] {
-  const selectors = [
-    '.jobs-search-results-list .job-card-container',
-    '.jobs-search-results__list-item',
-    '.scaffold-layout__list-item',
-  ]
-  for (const sel of selectors) {
-    const els = Array.from(document.querySelectorAll<HTMLElement>(sel))
-    if (els.length > 0) return els
-  }
-  return []
+  const cards = Array.from(document.querySelectorAll<HTMLElement>('li[data-occludable-job-id]'))
+  return cards.filter(c => c.offsetParent !== null) // visible only
 }
 
 async function processJobCard(card: HTMLElement) {
-  // Extract job info from card
-  const titleEl = card.querySelector<HTMLElement>('.job-card-list__title, .job-card-container__link')
-  const companyEl = card.querySelector<HTMLElement>('.job-card-container__company-name, .artdeco-entity-lockup__subtitle')
-  const title = titleEl?.innerText?.trim() ?? 'Unknown Role'
+  // Check if already applied (footer badge says "Applied")
+  const footerState = card.querySelector<HTMLElement>('.job-card-container__footer-job-state')
+  if (footerState?.innerText?.trim() === 'Applied') return
+
+  // Main bot: click first <a> tag with visible text; title = a.innerText up to first newline
+  // (Selenium .text = visible text only, equivalent to JS innerText — textContent includes hidden nodes)
+  const links = Array.from(card.querySelectorAll<HTMLElement>('a'))
+  const link = links.find(a => a.innerText?.trim().length > 2 && a.offsetParent !== null) ?? links[0]
+  if (!link) return
+
+  const title = (link.innerText?.split('\n')[0] ?? '').trim() || 'Unknown Role'
+
+  const companyEl = card.querySelector<HTMLElement>(
+    '.job-card-container__primary-description, .artdeco-entity-lockup__subtitle',
+  )
   const company = companyEl?.innerText?.trim() ?? 'Unknown Company'
 
-  // Click the card to open job detail
-  titleEl?.click()
-  await sleep(1200)
+  const locationEl = card.querySelector<HTMLElement>(
+    '.job-card-container__metadata-item, .artdeco-entity-lockup__caption, ' +
+    '.job-card-container__metadata-wrapper li',
+  )
+  const location = locationEl?.innerText?.trim() ?? ''
 
-  // Check if Easy Apply button exists
+  jobCounter++
+  const jobNum = jobCounter
+  emitJobEvent({ jobNum, title, company, status: 'clicking' })
+  log(`Checking: ${title} @ ${company}`)
+
+  link.click()
+  await sleep(1500)
+
+  // Wait for the detail panel to fully load
+  await waitFor(() => !!document.querySelector(
+    '.job-details-jobs-unified-top-card__primary-description-container, ' +
+    '.jobs-details__main-content, .jobs-unified-top-card__primary-description'
+  ), 5000)
+
+  // Skip if already applied (redundant check on detail panel)
+  if (document.querySelector('.jobs-s-apply__application-link')) {
+    emitJobEvent({ jobNum, title, company, status: 'skipped', detail: 'Already applied' })
+    log(`Skipped: ${title} @ ${company} (already applied)`)
+    return
+  }
+
   const applyBtn = await findEasyApplyButton()
   if (!applyBtn) {
+    emitJobEvent({ jobNum, title, company, status: 'skipped', detail: 'No Easy Apply' })
     log(`Skipped: ${title} @ ${company} (no Easy Apply)`)
     return
   }
 
+  emitJobEvent({ jobNum, title, company, status: 'applying' })
   log(`Applying: ${title} @ ${company}`)
   applyBtn.click()
   await sleep(1500)
 
-  const success = await handleApplicationModal(title, company)
+  const success = await handleApplicationModal(jobNum)
   if (success) {
     appliedCount++
+    emitJobEvent({ jobNum, title, company, status: 'applied' })
     log(`Applied (${appliedCount}): ${title} @ ${company}`)
-    await reportJob({ title, company, url: window.location.href, status: 'applied' })
+    await reportJob({ title, company, location, url: window.location.href, status: 'applied' })
   } else {
+    emitJobEvent({ jobNum, title, company, status: 'error' })
     log(`Error applying to: ${title} @ ${company}`)
+    discardApplication()
+    await sleep(1000)
   }
-
-  // Close modal if still open
-  closeModal()
-  await sleep(600)
 }
 
+// Match main bot's 3-way Easy Apply detection exactly
 async function findEasyApplyButton(): Promise<HTMLElement | null> {
-  const selectors = [
-    'button[aria-label*="Easy Apply"]',
-    '.jobs-apply-button--top-card button',
-    '.jobs-s-apply button',
-    'button.jobs-apply-button',
-  ]
-  for (let i = 0; i < 3; i++) {
-    for (const sel of selectors) {
-      const btn = document.querySelector<HTMLElement>(sel)
-      if (btn && btn.offsetParent !== null) return btn
+  for (let attempt = 0; attempt < 4; attempt++) {
+    if (attempt > 0) await sleep(600)
+
+    // 1. Old + new UI: button with class jobs-apply-button (artdeco-button--3) + aria-label
+    let btn = document.querySelector<HTMLElement>(
+      'button.jobs-apply-button[aria-label*="Easy"], ' +
+      'button.jobs-apply-button[aria-label*="LinkedIn Apply"]'
+    )
+    if (btn && btn.offsetParent !== null) return btn
+
+    // 2. New SPA-style: anchor with openSDUIApplyFlow + aria-label
+    btn = document.querySelector<HTMLElement>(
+      'a[aria-label*="LinkedIn Apply"][href*="openSDUIApplyFlow"]'
+    )
+    if (btn && btn.offsetParent !== null) return btn
+
+    // 3. Fallback anchor with /apply/ path
+    btn = document.querySelector<HTMLElement>(
+      'a[href*="/apply/"][href*="openSDUIApplyFlow"]'
+    )
+    if (btn && btn.offsetParent !== null) return btn
+
+    // 4. Broader fallback: any visible jobs-apply-button
+    btn = document.querySelector<HTMLElement>('button.jobs-apply-button:not([disabled])')
+    if (btn && btn.offsetParent !== null) {
+      // Only return if it's not an external apply button
+      const label = (btn.getAttribute('aria-label') ?? '').toLowerCase()
+      if (!label.includes('external') && !label.includes('company site')) return btn
     }
-    await sleep(500)
   }
   return null
 }
 
-// ─── Application modal handler ───────────────────────────────────────────────
-async function handleApplicationModal(title: string, company: string): Promise<boolean> {
-  const modalSel = '.jobs-easy-apply-modal, .artdeco-modal'
-  const modal = await waitFor(() => document.querySelector<HTMLElement>(modalSel), 5000)
+// ─── Application modal ────────────────────────────────────────────────────────
+async function handleApplicationModal(jobNum: number): Promise<boolean> {
+  // Main bot: find_by_class(driver, "jobs-easy-apply-modal") — exact class only
+  const modal = await waitFor(
+    () => document.querySelector<HTMLElement>('.jobs-easy-apply-modal'),
+    6000,
+  )
   if (!modal) { log('Modal did not open'); return false }
 
-  const maxSteps = 10
+  await sleep(500)
+
+  // Main bot clicks "Next" once right after modal opens to load first form page
+  const initialNext = spanButton(modal, 'Next')
+  if (initialNext) { initialNext.click(); await sleep(1200) }
+
+  const maxSteps = 15
   let step = 0
 
   while (step < maxSteps && !stopFlag) {
-    await sleep(800)
-
-    // Fill all visible form fields
+    await sleep(900)
+    emitJobEvent({ jobNum, status: 'filling', detail: `Step ${step + 1}` })
     await fillFormFields(modal)
-    await sleep(500)
+    await sleep(600)
 
-    // Find action button: Submit > Review > Next > Continue
-    const submitted = await clickNextOrSubmit(modal)
-    if (submitted === 'submitted') return true
-    if (submitted === 'error') return false
-    step++
+    // Check for visible inline errors before advancing
+    const err = modal.querySelector<HTMLElement>('.artdeco-inline-feedback--error')
+    if (err && err.offsetParent !== null && err.textContent?.trim()) {
+      log(`Form validation error: ${err.textContent.trim()}`)
+      return false
+    }
+
+    // Navigate: Submit application > Review > Next (matches main bot priority)
+    const submitBtn = spanButton(modal, 'Submit application')
+    if (submitBtn && !submitBtn.disabled) {
+      emitJobEvent({ jobNum, status: 'submitting' })
+      submitBtn.click()
+      await sleep(2500)
+      // Click "Done" confirmation
+      const doneBtn = spanButton(document.body, 'Done') ??
+        document.querySelector<HTMLButtonElement>('[data-test-modal-close-btn]')
+      doneBtn?.click()
+      return true
+    }
+
+    const reviewBtn = spanButton(modal, 'Review')
+    if (reviewBtn && !reviewBtn.disabled) {
+      reviewBtn.click()
+      await sleep(1200)
+      // After Review, the Submit button appears — handle it next iteration
+      step++
+      continue
+    }
+
+    const nextBtn = spanButton(modal, 'Next') ??
+      modal.querySelector<HTMLButtonElement>('button[data-easy-apply-next-button]')
+    if (nextBtn && !nextBtn.disabled) {
+      nextBtn.click()
+      step++
+      continue
+    }
+
+    // No navigation found — something unexpected
+    log('No navigation button found in modal')
+    return false
   }
 
   return false
 }
 
-type StepResult = 'next' | 'submitted' | 'error'
-
-async function clickNextOrSubmit(modal: HTMLElement): Promise<StepResult> {
-  const submitSel = 'button[aria-label="Submit application"]'
-  const reviewSel = 'button[aria-label="Review your application"]'
-  const nextSel = [
-    'button[aria-label="Continue to next step"]',
-    'button[aria-label="Next"]',
-    'button[data-easy-apply-next-button]',
-  ]
-
-  const submitBtn = modal.querySelector<HTMLButtonElement>(submitSel)
-  if (submitBtn && !submitBtn.disabled) {
-    submitBtn.click()
-    await sleep(1500)
-    // Check for confirmation
-    const confirmed = await waitFor(
-      () => document.querySelector('.artdeco-modal__confirm-dialog-btn, [data-test-modal-close-btn]'),
-      3000,
-    )
-    if (confirmed) (confirmed as HTMLElement).click()
-    return 'submitted'
-  }
-
-  const reviewBtn = modal.querySelector<HTMLButtonElement>(reviewSel)
-  if (reviewBtn && !reviewBtn.disabled) {
-    reviewBtn.click()
-    return 'next'
-  }
-
-  for (const sel of nextSel) {
-    const btn = modal.querySelector<HTMLButtonElement>(sel)
-    if (btn && !btn.disabled) {
-      btn.click()
-      return 'next'
+/** Find a <button> whose direct <span> child has exact trimmed text */
+function spanButton(container: HTMLElement | Document, text: string): HTMLButtonElement | null {
+  for (const btn of Array.from(container.querySelectorAll<HTMLButtonElement>('button'))) {
+    for (const span of Array.from(btn.querySelectorAll('span'))) {
+      if (span.textContent?.trim() === text) return btn
     }
   }
-
-  // Check if there's an error message
-  const errorEl = modal.querySelector('.artdeco-inline-feedback--error, [data-test-form-element-error-message]')
-  if (errorEl) {
-    log(`Form error: ${errorEl.textContent?.trim()}`)
-    return 'error'
-  }
-
-  return 'error'
+  return null
 }
 
-// ─── Form filling ────────────────────────────────────────────────────────────
+/** Discard a failed/partial application to keep LinkedIn in a clean state */
+function discardApplication() {
+  // Click the modal dismiss/close button
+  const dismissBtn = document.querySelector<HTMLElement>(
+    '[aria-label="Dismiss"], .artdeco-modal__dismiss, [data-test-modal-close-btn]'
+  )
+  dismissBtn?.click()
+  // After ~600ms LinkedIn usually shows a "Discard application?" dialog
+  setTimeout(() => {
+    const discardBtn = spanButton(document.body, 'Discard') ??
+      spanButton(document.body, 'Discard application')
+    discardBtn?.click()
+  }, 600)
+}
+
+// ─── Form filling — mirrors main bot's answer_questions() ────────────────────
 async function fillFormFields(modal: HTMLElement) {
   if (!ctx) return
   const personals = (ctx.config.personals ?? {}) as Record<string, unknown>
-  const questions = (ctx.config.questions ?? []) as Array<Record<string, string>>
+  const questionsConfig = (ctx.config.questions ?? {}) as Record<string, string>
 
-  // Fill text inputs
-  const textInputs = modal.querySelectorAll<HTMLInputElement>(
-    'input[type="text"]:not([disabled]), input[type="number"]:not([disabled])',
+  // Main bot iterates div[data-test-form-element] containers
+  const formElements = Array.from(
+    modal.querySelectorAll<HTMLElement>('div[data-test-form-element]')
   )
-  for (const input of textInputs) {
-    if (input.value.trim()) continue // already filled
-    const label = getLabelFor(input, modal)
-    const answer = resolveAnswer(label, personals, questions, input.type)
-    if (answer) setInputValue(input, answer)
-  }
 
-  // Fill textareas (cover letter, additional info)
-  const textareas = modal.querySelectorAll<HTMLTextAreaElement>('textarea:not([disabled])')
-  for (const ta of textareas) {
-    if (ta.value.trim()) continue
-    const label = getLabelFor(ta, modal)
-    const answer = resolveAnswer(label, personals, questions, 'textarea')
-    if (answer) setInputValue(ta, answer)
-  }
+  for (const el of formElements) {
+    // ── Select ──────────────────────────────────────────────────────────────
+    const sel = el.querySelector<HTMLSelectElement>('select')
+    if (sel) {
+      if (sel.selectedIndex > 0 && sel.value !== '') continue
+      const labelText = getFormLabel(el)
+      const answer = resolveAnswer(labelText, personals, questionsConfig, 'select')
+      if (answer) {
+        selectByText(sel, answer)
+      } else if (sel.options.length > 1) {
+        sel.selectedIndex = 1
+        sel.dispatchEvent(new Event('change', { bubbles: true }))
+      }
+      continue
+    }
 
-  // Fill selects
-  const selects = modal.querySelectorAll<HTMLSelectElement>('select:not([disabled])')
-  for (const sel of selects) {
-    if (sel.value && sel.value !== '' && sel.selectedIndex > 0) continue
-    const label = getLabelFor(sel, modal)
-    const answer = resolveAnswer(label, personals, questions, 'select')
-    if (answer) {
-      selectOption(sel, answer)
-    } else if (sel.options.length > 1) {
-      sel.selectedIndex = 1 // pick first non-empty option
-      sel.dispatchEvent(new Event('change', { bubbles: true }))
+    // ── Radio (fieldset[data-test-form-builder-radio-button-form-component]) ─
+    const fieldset = el.querySelector<HTMLElement>(
+      'fieldset[data-test-form-builder-radio-button-form-component]'
+    )
+    if (fieldset) {
+      const radios = Array.from(fieldset.querySelectorAll<HTMLInputElement>('input[type="radio"]'))
+      if (radios.some(r => r.checked)) continue
+      const titleSpan = fieldset.querySelector<HTMLElement>(
+        'span[data-test-form-builder-radio-button-form-component__title] .visually-hidden, ' +
+        'span[data-test-form-builder-radio-button-form-component__title]'
+      )
+      const labelText = titleSpan?.textContent?.trim() ?? ''
+      const answer = resolveAnswer(labelText, personals, questionsConfig, 'radio')
+      const target = pickRadio(fieldset, radios, answer)
+      if (target) {
+        const lbl = fieldset.querySelector<HTMLElement>(`label[for="${target.id}"]`)
+        ;(lbl ?? target).click()
+      }
+      continue
+    }
+
+    // ── Text / Number input ──────────────────────────────────────────────────
+    const textInput = el.querySelector<HTMLInputElement>('input[type="text"], input[type="number"]')
+    if (textInput && !textInput.disabled) {
+      if (textInput.value.trim()) continue
+      const labelText = getFormLabel(el)
+      const answer = resolveAnswer(labelText, personals, questionsConfig, 'text')
+      if (answer) setReactValue(textInput, answer)
+      continue
+    }
+
+    // ── Textarea (cover letter / summary) ────────────────────────────────────
+    const ta = el.querySelector<HTMLTextAreaElement>('textarea')
+    if (ta && !ta.disabled) {
+      if (ta.value.trim()) continue
+      const labelText = getFormLabel(el)
+      const answer = resolveAnswer(labelText, personals, questionsConfig, 'textarea')
+      if (answer) setReactValue(ta, answer)
     }
   }
+}
 
-  // Handle radio groups (Yes/No questions)
-  const radioGroups = getRadioGroups(modal)
-  for (const [name, radios] of Object.entries(radioGroups)) {
-    if (radios.some((r) => r.checked)) continue
-    const label = getFieldsetLabel(radios[0], modal)
-    const answer = resolveAnswer(label, personals, questions, 'radio')
-    const target = answer
-      ? radios.find((r) => r.value.toLowerCase().includes(answer.toLowerCase())) ?? radios[0]
-      : pickDefaultRadio(radios, label)
-    if (target) {
-      target.click()
-      target.dispatchEvent(new Event('change', { bubbles: true }))
-    }
-    void name
+/** Get visible label text for a form element container */
+function getFormLabel(container: HTMLElement): string {
+  // Try .visually-hidden first (main bot's preferred approach)
+  const hidden = container.querySelector<HTMLElement>('label .visually-hidden, legend .visually-hidden')
+  if (hidden?.textContent?.trim()) return hidden.textContent.trim()
+  // Fallback: label or legend text
+  const label = container.querySelector<HTMLElement>('label, legend')
+  return label?.textContent?.trim() ?? ''
+}
+
+/** Pick a radio button matching the desired answer text */
+function pickRadio(fieldset: HTMLElement, radios: HTMLInputElement[], answer: string): HTMLInputElement | null {
+  if (!answer) return radios[0] ?? null
+  const aLow = answer.toLowerCase()
+  // Try matching label text
+  for (const r of radios) {
+    const lbl = fieldset.querySelector<HTMLElement>(`label[for="${r.id}"]`)
+    if (lbl?.textContent?.toLowerCase().includes(aLow)) return r
   }
+  // Try matching value
+  return radios.find(r => r.value.toLowerCase().includes(aLow)) ?? radios[0] ?? null
 }
 
 function resolveAnswer(
   label: string,
   personals: Record<string, unknown>,
-  questions: Array<Record<string, string>>,
+  questionsConfig: Record<string, string>,
   fieldType: string,
 ): string {
   const lbl = label.toLowerCase()
 
-  // Check pre-configured Q&A
-  for (const qa of questions) {
-    const q = (qa.question ?? '').toLowerCase()
-    if (q && lbl.includes(q.slice(0, 20))) return qa.answer ?? ''
+  // Pre-configured Q&A from user settings (main bot's questions_list)
+  for (const [q, a] of Object.entries(questionsConfig)) {
+    if (q && lbl.includes(q.toLowerCase().slice(0, 30))) return a
   }
 
-  // Smart defaults from personals
-  if (lbl.includes('phone') || lbl.includes('mobile')) return String(personals.phone ?? '')
-  if (lbl.includes('city') || lbl.includes('location')) return String(personals.city ?? '')
+  // Defaults matching main bot's answer_common_questions()
+  if (lbl.includes('experience') || lbl.includes('years')) return String(personals.years_of_experience ?? '3')
+  if (lbl.includes('phone') || lbl.includes('mobile')) return String(personals.phone_number ?? personals.phone ?? '')
   if (lbl.includes('linkedin')) return String(personals.linkedin_url ?? '')
-  if (lbl.includes('website') || lbl.includes('portfolio')) return String(personals.website ?? '')
-  if (lbl.includes('first name') || lbl.includes('first_name')) return String(personals.first_name ?? '')
-  if (lbl.includes('last name') || lbl.includes('last_name')) return String(personals.last_name ?? '')
-  if (lbl.includes('name') && !lbl.includes('company')) {
-    const fn = String(personals.first_name ?? '')
-    const ln = String(personals.last_name ?? '')
-    return fn && ln ? `${fn} ${ln}` : fn || ln
+  if (lbl.includes('website') || lbl.includes('portfolio') || lbl.includes('github')) return String(personals.website ?? '')
+  if (lbl.includes('street')) return String(personals.street ?? '')
+  if (lbl.includes('city') || lbl.includes('location') || lbl.includes('address')) return String(personals.current_city ?? personals.city ?? '')
+  if (lbl.includes('state')) return String(personals.state ?? '')
+  if (lbl.includes('country')) return String(personals.country ?? 'United States')
+  if (lbl.includes('zip') || lbl.includes('postal')) return String(personals.zip ?? '')
+  if (lbl.includes('first name')) return String(personals.first_name ?? '')
+  if (lbl.includes('last name') || lbl.includes('surname')) return String(personals.last_name ?? '')
+  if (lbl.includes('full name') || lbl.includes('your name') || lbl.includes('signature')) {
+    return `${personals.first_name ?? ''} ${personals.last_name ?? ''}`.trim()
   }
+  if (lbl.includes('name') && !lbl.includes('company')) return String(personals.first_name ?? '')
   if (lbl.includes('email')) return String(personals.email ?? '')
-  if (lbl.includes('years') || lbl.includes('experience')) return '3' // default experience
-  if (lbl.includes('salary') || lbl.includes('expected')) return String(personals.expected_salary ?? '80000')
-  if (lbl.includes('notice') || lbl.includes('availability')) return '2 weeks'
+  if (lbl.includes('salary') || lbl.includes('compensation') || lbl.includes('expected')) return String(personals.salary_expectations ?? personals.expected_salary ?? '100000')
+  if (lbl.includes('notice') || lbl.includes('availability') || lbl.includes('start')) return String(personals.notice_period ?? '2 weeks')
+  if (lbl.includes('gender') || lbl.includes('sex')) return String(personals.gender ?? 'Decline')
+  if (lbl.includes('disability')) return String(personals.disability_status ?? 'Decline')
+  if (lbl.includes('veteran') || lbl.includes('protected')) return String(personals.veteran_status ?? 'I am not a protected veteran')
 
-  // Radio defaults
   if (fieldType === 'radio') {
-    if (lbl.includes('authorized') || lbl.includes('eligible') || lbl.includes('citizen')) return 'yes'
-    if (lbl.includes('require sponsor') || lbl.includes('visa')) return 'no'
-    return 'yes' // safe default
+    if (lbl.includes('authorized') || lbl.includes('eligible') || lbl.includes('citizen')) return 'Yes'
+    if (lbl.includes('require sponsor') || lbl.includes('visa')) return 'No'
+    if (lbl.includes('us resident') || lbl.includes('permanent resident')) return 'Yes'
+    return 'Yes'
+  }
+
+  if (fieldType === 'select') {
+    if (lbl.includes('proficiency') || lbl.includes('language')) return 'Professional'
+    return ''
   }
 
   if (fieldType === 'textarea') {
-    if (lbl.includes('cover') || lbl.includes('why')) return 'I am excited about this opportunity and believe my skills are a strong match for this role.'
+    if (lbl.includes('cover') || lbl.includes('why') || lbl.includes('summary')) {
+      return 'I am excited about this opportunity and confident that my skills and experience make me a strong fit for this role. I look forward to contributing to your team.'
+    }
     return ''
   }
 
   return ''
 }
 
-// ─── DOM helpers ─────────────────────────────────────────────────────────────
-function getLabelFor(el: HTMLElement, container: HTMLElement): string {
-  // Try aria-label
-  if (el.getAttribute('aria-label')) return el.getAttribute('aria-label')!
-
-  // Try id → label
-  if (el.id) {
-    const lbl = container.querySelector<HTMLLabelElement>(`label[for="${el.id}"]`)
-    if (lbl) return lbl.innerText.trim()
-  }
-
-  // Walk up to find label sibling or legend
-  let node: HTMLElement | null = el.parentElement
-  while (node && node !== container) {
-    const lbl = node.querySelector<HTMLElement>('label, legend, .artdeco-text-input--label, [data-test-text-input-label]')
-    if (lbl && !lbl.contains(el)) return lbl.innerText.trim()
-    node = node.parentElement
-  }
-
-  return el.getAttribute('placeholder') ?? el.getAttribute('name') ?? ''
-}
-
-function getFieldsetLabel(radio: HTMLInputElement, container: HTMLElement): string {
-  let node: HTMLElement | null = radio.parentElement
-  while (node && node !== container) {
-    const legend = node.querySelector<HTMLElement>('legend, .fb-dash-form-element__label')
-    if (legend) return legend.innerText.trim()
-    if (node.tagName === 'FIELDSET') {
-      const leg = node.querySelector('legend')
-      if (leg) return leg.innerText.trim()
-    }
-    node = node.parentElement
-  }
-  return radio.name
-}
-
-function getRadioGroups(modal: HTMLElement): Record<string, HTMLInputElement[]> {
-  const radios = modal.querySelectorAll<HTMLInputElement>('input[type="radio"]')
-  const groups: Record<string, HTMLInputElement[]> = {}
-  for (const r of radios) {
-    const name = r.name || r.getAttribute('data-test-radio-input') || String(Math.random())
-    if (!groups[name]) groups[name] = []
-    groups[name].push(r)
-  }
-  return groups
-}
-
-function pickDefaultRadio(radios: HTMLInputElement[], label: string): HTMLInputElement {
-  const lbl = label.toLowerCase()
-  // Prefer "yes" for authorization questions
-  if (lbl.includes('authorized') || lbl.includes('eligible') || lbl.includes('require') === false) {
-    return radios.find((r) => r.value.toLowerCase() === 'yes') ?? radios[0]
-  }
-  return radios[0]
-}
-
-function setInputValue(el: HTMLInputElement | HTMLTextAreaElement, value: string) {
-  const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-    el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype,
-    'value',
-  )?.set
-  nativeInputValueSetter?.call(el, value)
+/** Set value in a React-controlled input without losing React's state */
+function setReactValue(el: HTMLInputElement | HTMLTextAreaElement, value: string) {
+  const proto = el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype
+  const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set
+  setter?.call(el, value)
   el.dispatchEvent(new Event('input', { bubbles: true }))
   el.dispatchEvent(new Event('change', { bubbles: true }))
 }
 
-function selectOption(sel: HTMLSelectElement, value: string) {
+/** Select <option> by matching visible text (partial, case-insensitive) */
+function selectByText(sel: HTMLSelectElement, value: string) {
   const lv = value.toLowerCase()
-  const opt = Array.from(sel.options).find(
-    (o) => o.value.toLowerCase().includes(lv) || o.text.toLowerCase().includes(lv),
-  )
-  if (opt) {
-    sel.value = opt.value
+  const phrases = [lv, 'yes', 'agree', 'i do', 'prefer not', 'decline']
+  // Try exact then partial
+  for (const phrase of (lv === value.toLowerCase() ? [lv] : phrases)) {
+    const opt = Array.from(sel.options).find(
+      o => o.text.toLowerCase().includes(phrase) || o.value.toLowerCase().includes(phrase)
+    )
+    if (opt) {
+      sel.value = opt.value
+      sel.dispatchEvent(new Event('change', { bubbles: true }))
+      return
+    }
+  }
+  // Last resort: pick first non-empty option
+  if (sel.options.length > 1) {
+    sel.selectedIndex = 1
     sel.dispatchEvent(new Event('change', { bubbles: true }))
   }
 }
 
-function closeModal() {
-  const closeBtn = document.querySelector<HTMLElement>(
-    '[aria-label="Dismiss"], [aria-label="Close"], .artdeco-modal__dismiss',
-  )
-  closeBtn?.click()
-}
-
-// ─── Pagination ──────────────────────────────────────────────────────────────
+// ─── Pagination — matches main bot's artdeco-pagination ──────────────────────
 async function goToNextPage(): Promise<boolean> {
-  const nextBtn = document.querySelector<HTMLElement>(
-    '[aria-label="Page 2"], [aria-label="Next"], .artdeco-pagination__button--next',
+  const pagination = document.querySelector<HTMLElement>(
+    '.jobs-search-pagination__pages, .artdeco-pagination, .artdeco-pagination__pages'
   )
-  if (!nextBtn || nextBtn.hasAttribute('disabled')) return false
+  if (!pagination) return false
+
+  const activeBtn = pagination.querySelector<HTMLButtonElement>('button.active, button[aria-current="true"]')
+  if (!activeBtn) return false
+
+  // Find the button that comes after the active one
+  const buttons = Array.from(pagination.querySelectorAll<HTMLButtonElement>('button[aria-label]'))
+  const activeIdx = buttons.indexOf(activeBtn)
+  const nextBtn = buttons[activeIdx + 1]
+  if (!nextBtn || nextBtn.disabled) return false
+
   nextBtn.click()
-  await sleep(2500)
+  await sleep(3000)
   return true
 }
 
 // ─── Report job to backend ────────────────────────────────────────────────────
+// Jobs are persisted via the agent WebSocket: the service worker sends a
+// `log` message whose line starts with "EVENT:" — the backend's agent_ws
+// handler parses it through bot_runner._persist_job_event().
 async function reportJob(job: JobRecord) {
-  if (!ctx) return
+  if (!ctx || !isCtxValid()) return
   try {
-    await fetch(`${ctx.backendUrl}/jobs`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${ctx.token}`,
-      },
-      body: JSON.stringify({
-        title: job.title,
-        company: job.company,
-        url: job.url,
-        status: job.status,
-        provider: 'linkedin',
-        pipeline_status: 'applied',
-      }),
+    const eventKind = job.status === 'applied' ? 'job_applied' : 'job_failed'
+    const eventPayload = {
+      event: eventKind,
+      title: job.title,
+      company: job.company,
+      location: job.location || undefined,
+      application_provider: 'linkedin_easy_apply',
+      application_link: job.status === 'applied' ? 'Easy Applied' : undefined,
+      job_link: job.url,
+    }
+    chrome.runtime.sendMessage({
+      type: 'BOT_LOG',
+      line: `EVENT:${JSON.stringify(eventPayload)}`,
     })
   } catch {
-    // Non-fatal — job tracking failure shouldn't stop the bot
+    // Non-fatal
   }
 }
 
@@ -477,6 +571,18 @@ function log(line: string) {
   console.log('[ApplyFlow AI Bot]', msg)
   if (!isCtxValid()) return
   try { chrome.runtime.sendMessage({ type: 'BOT_LOG', line: msg }) } catch { /* context gone */ }
+}
+
+function emitJobEvent(ev: Record<string, unknown>) {
+  if (!isCtxValid()) return
+  try {
+    chrome.runtime.sendMessage({
+      type: 'JOB_EVENT',
+      appliedCount,
+      maxJobs: maxJobsForRun,
+      ...ev,
+    })
+  } catch { /* context gone */ }
 }
 
 function sleep(ms: number): Promise<void> {

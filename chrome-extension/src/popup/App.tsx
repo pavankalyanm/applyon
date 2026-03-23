@@ -5,7 +5,7 @@ import type { AuthState, Run, RunStatus } from '../lib/types'
 import NotConnected from './components/NotConnected'
 import StatusBadge from './components/StatusBadge'
 import RunControls from './components/RunControls'
-import LiveLogs from './components/LiveLogs'
+import JobTracker from './components/JobTracker'
 
 const DEFAULT_BACKEND = 'http://localhost:8000'
 
@@ -85,7 +85,6 @@ export default function App() {
     : activeRun?.status === 'stopped' ? 'stopped'
     : 'idle'
 
-  const isActive = runStatus === 'running' || runStatus === 'pending'
   const client = auth ? new ApiClient(auth.backendUrl, auth.token) : null
 
   return (
@@ -142,7 +141,7 @@ export default function App() {
             )}
 
             <div className="divider" />
-            <LiveLogs active={isActive} />
+            <JobTracker />
           </>
         )}
       </div>
