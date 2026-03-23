@@ -3,6 +3,7 @@ import {
   Button,
   Chip,
   FormControl,
+  IconButton,
   InputLabel,
   MenuItem,
   Paper,
@@ -17,6 +18,8 @@ import {
   TableRow,
   TextField,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material'
 import { OpenInNew, Refresh } from '@mui/icons-material'
 import { useEffect, useState } from 'react'
@@ -64,6 +67,8 @@ const statusColors: Record<OutreachStatus, string> = {
 const statusStats: OutreachStatus[] = ['sent', 'review_pending', 'drafted', 'skipped', 'failed']
 
 export function OutreachesDashboard() {
+  const theme = useTheme()
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
   const [items, setItems] = useState<OutreachEvent[]>([])
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('all')
@@ -104,31 +109,39 @@ export function OutreachesDashboard() {
   }
 
   return (
-    <Box sx={{ p: { xs: 3, md: 4 }, minHeight: '100%' }}>
+    <Box sx={{ p: { xs: 2, sm: 3, md: 4 }, minHeight: '100%' }}>
       {/* ── Page header ── */}
-      <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 4 }}>
+      <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: { xs: 2.5, md: 4 } }}>
         <Box>
-          <Typography variant="h4" sx={{ color: '#0f172a', fontWeight: 800, letterSpacing: '-0.02em' }}>
+          <Typography variant={isMobile ? 'h5' : 'h4'} sx={{ color: '#0f172a', fontWeight: 800, letterSpacing: '-0.02em' }}>
             Outreaches
           </Typography>
-          <Typography color="text.secondary" sx={{ mt: 0.5, fontSize: '0.9rem' }}>
-            Track recruiter outreach runs, message status, profile links, and emails found.
-          </Typography>
+          {!isMobile && (
+            <Typography color="text.secondary" sx={{ mt: 0.5, fontSize: '0.9rem' }}>
+              Track recruiter outreach runs, message status, profile links, and emails found.
+            </Typography>
+          )}
         </Box>
-        <Button
-          variant="outlined"
-          startIcon={<Refresh sx={{ fontSize: 16 }} />}
-          onClick={loadOutreaches}
-          disabled={loading}
-          size="small"
-          sx={{
-            borderColor: '#d1d5db',
-            color: '#374151',
-            '&:hover': { borderColor: '#16a34a', color: '#16a34a', bgcolor: 'transparent' },
-          }}
-        >
-          {loading ? 'Refreshing…' : 'Refresh'}
-        </Button>
+        {isMobile ? (
+          <IconButton size="small" onClick={loadOutreaches} disabled={loading} sx={{ color: '#374151', border: '1px solid #d1d5db', borderRadius: 1 }}>
+            <Refresh sx={{ fontSize: 18 }} />
+          </IconButton>
+        ) : (
+          <Button
+            variant="outlined"
+            startIcon={<Refresh sx={{ fontSize: 16 }} />}
+            onClick={loadOutreaches}
+            disabled={loading}
+            size="small"
+            sx={{
+              borderColor: '#d1d5db',
+              color: '#374151',
+              '&:hover': { borderColor: '#16a34a', color: '#16a34a', bgcolor: 'transparent' },
+            }}
+          >
+            {loading ? 'Refreshing…' : 'Refresh'}
+          </Button>
+        )}
       </Stack>
 
       {/* ── Status stat cards ── */}
@@ -176,19 +189,18 @@ export function OutreachesDashboard() {
       {/* ── Filters ── */}
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mb: 3 }}>
         <TextField
-          placeholder="Search by role, recruiter, company, or email…"
+          placeholder={isMobile ? 'Search…' : 'Search by role, recruiter, company, or email…'}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           size="small"
           sx={{ flex: 1 }}
         />
-        <FormControl size="small" sx={{ minWidth: 200 }}>
+        <FormControl size="small" sx={{ minWidth: { xs: 'unset', sm: 180 } }} fullWidth={isMobile}>
           <InputLabel>Status</InputLabel>
           <Select
             label="Status"
             value={status}
             onChange={(e) => setStatus(e.target.value)}
-            sx={{}}
           >
             <MenuItem value="all">All statuses</MenuItem>
             {statusOptions.map((s) => (
@@ -200,7 +212,95 @@ export function OutreachesDashboard() {
         </FormControl>
       </Stack>
 
-      {/* ── Table ── */}
+      {/* ── Mobile cards / Desktop table ── */}
+      {isMobile ? (
+        <>
+          {items.length === 0 ? (
+            <Box sx={{ p: 4, bgcolor: '#fff', border: '1px solid #e2e8f0', textAlign: 'center', color: '#64748b', fontSize: '0.9rem' }}>
+              No outreach activity matched the current filters.
+            </Box>
+          ) : (
+            <Stack spacing={1.5}>
+              {items.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((item) => (
+                <Box
+                  key={item.id}
+                  sx={{
+                    bgcolor: '#fff',
+                    border: '1px solid #e2e8f0',
+                    borderLeft: `3px solid ${item.status === 'sent' ? '#16a34a' : item.status === 'failed' ? '#ef4444' : item.status === 'review_pending' ? '#f59e0b' : '#94a3b8'}`,
+                    p: 2,
+                  }}
+                >
+                  <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 0.75 }}>
+                    <Box sx={{ flex: 1, minWidth: 0, pr: 1 }}>
+                      <Typography sx={{ fontWeight: 700, color: '#0f172a', fontSize: '0.9rem' }}>
+                        {item.recruiter_contact?.name || 'Unknown recruiter'}
+                      </Typography>
+                      <Typography sx={{ color: '#475569', fontSize: '0.78rem' }}>
+                        {item.recruiter_contact?.headline || item.recruiter_contact?.company || ''}
+                      </Typography>
+                      {(item.recruiter_email || item.recruiter_contact?.email) && (
+                        <Typography sx={{ color: '#94a3b8', fontSize: '0.72rem', fontFamily: 'monospace' }}>
+                          {item.recruiter_email || item.recruiter_contact?.email}
+                        </Typography>
+                      )}
+                    </Box>
+                    <Chip
+                      label={item.status.replace('_', ' ')}
+                      color={statusChipColor(item.status)}
+                      size="small"
+                      variant="outlined"
+                      sx={{ fontSize: '0.68rem', height: 20, textTransform: 'capitalize', fontWeight: 600, flexShrink: 0 }}
+                    />
+                  </Stack>
+
+                  <Stack direction="row" spacing={0.5} flexWrap="wrap" sx={{ gap: 0.5, mb: 1 }}>
+                    <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: '#0f172a' }}>
+                      {item.role || 'Unknown role'}
+                    </Typography>
+                    {(item.company_filter || item.recruiter_contact?.company) && (
+                      <Typography sx={{ fontSize: '0.8rem', color: '#475569' }}>
+                        · {item.company_filter || item.recruiter_contact?.company}
+                      </Typography>
+                    )}
+                  </Stack>
+
+                  {(item.message_sent || item.message_input) && (
+                    <Typography
+                      sx={{
+                        color: '#475569', fontSize: '0.78rem', lineHeight: 1.45, mb: 1,
+                        display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                      }}
+                    >
+                      {item.message_sent || item.message_input}
+                    </Typography>
+                  )}
+
+                  <Stack direction="row" justifyContent="space-between" alignItems="center">
+                    <Stack direction="row" spacing={0.5} alignItems="center">
+                      <Chip label={item.used_ai ? 'AI' : 'Exact'} size="small" variant="outlined" sx={{ fontSize: '0.65rem', height: 18, borderColor: '#d1d5db', color: '#64748b' }} />
+                      <Typography sx={{ fontSize: '0.72rem', color: '#94a3b8' }}>#{item.run_id}</Typography>
+                    </Stack>
+                    {item.recruiter_profile_url && (
+                      <IconButton size="small" href={item.recruiter_profile_url} target="_blank" rel="noreferrer" sx={{ color: '#374151', border: '1px solid #d1d5db', p: 0.75 }}>
+                        <OpenInNew sx={{ fontSize: 14 }} />
+                      </IconButton>
+                    )}
+                  </Stack>
+                </Box>
+              ))}
+            </Stack>
+          )}
+          <TablePagination
+            component="div"
+            count={items.length}
+            page={page}
+            onPageChange={(_, p) => setPage(p)}
+            rowsPerPage={rowsPerPage}
+            rowsPerPageOptions={[rowsPerPage]}
+          />
+        </>
+      ) : (
       <TableContainer
         component={Paper}
         sx={{ border: '1px solid #e2e8f0', boxShadow: 'none' }}
@@ -291,7 +391,7 @@ export function OutreachesDashboard() {
                 </TableCell>
 
                 {/* Message */}
-                <TableCell sx={{ minWidth: 300, maxWidth: 360 }}>
+                <TableCell sx={{ minWidth: { xs: 160, sm: 220, md: 300 }, maxWidth: { xs: 200, md: 360 } }}>
                   <Typography
                     sx={{
                       color: '#334155',
@@ -367,6 +467,7 @@ export function OutreachesDashboard() {
           rowsPerPageOptions={[rowsPerPage]}
         />
       </TableContainer>
+      )}
     </Box>
   )
 }

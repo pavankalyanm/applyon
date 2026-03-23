@@ -20,6 +20,8 @@ import {
   TableRow,
   TextField,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material'
 import {
   Close,
@@ -90,6 +92,8 @@ function TerminalLogDialog({
   details: RunDetail | null
 }) {
   const scrollRef = useRef<HTMLDivElement>(null)
+  const theme = useTheme()
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
 
   // Auto-scroll to bottom when logs update
   useEffect(() => {
@@ -114,6 +118,7 @@ function TerminalLogDialog({
       onClose={onClose}
       maxWidth="md"
       fullWidth
+      fullScreen={isMobile}
       PaperProps={{
         sx: {
           bgcolor: '#0a0f0a',
@@ -270,6 +275,8 @@ function TerminalLogDialog({
 }
 
 export function Dashboard() {
+  const theme = useTheme()
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
   const [runs, setRuns] = useState<Run[]>([])
   const [_tick, setTick] = useState(0)
   const [runsPage, setRunsPage] = useState(1)
@@ -473,55 +480,62 @@ export function Dashboard() {
   ]
 
   return (
-    <Box sx={{ p: { xs: 3, md: 4 }, minHeight: '100%' }}>
+    <Box sx={{ p: { xs: 2, sm: 3, md: 4 }, minHeight: '100%' }}>
       {/* ── Page header ── */}
-      <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 4 }}>
+      <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: { xs: 2.5, md: 4 } }}>
         <Box>
-          <Typography variant="h4" sx={{ color: '#0f172a', fontWeight: 800, letterSpacing: '-0.02em' }}>
+          <Typography variant={isMobile ? 'h5' : 'h4'} sx={{ color: '#0f172a', fontWeight: 800, letterSpacing: '-0.02em' }}>
             Dashboard
           </Typography>
-          <Typography color="text.secondary" sx={{ mt: 0.5, fontSize: '0.9rem' }}>
-            Monitor and control your automated job application runs.
-          </Typography>
+          {!isMobile && (
+            <Typography color="text.secondary" sx={{ mt: 0.5, fontSize: '0.9rem' }}>
+              Monitor and control your automated job application runs.
+            </Typography>
+          )}
         </Box>
-        <Button
-          variant="outlined"
-          startIcon={<Refresh sx={{ fontSize: 16 }} />}
-          onClick={refreshAll}
-          size="small"
-          sx={{
-            borderColor: '#d1d5db',
-            color: '#374151',
-            '&:hover': { borderColor: '#16a34a', color: '#16a34a', bgcolor: 'transparent' },
-          }}
-        >
-          Refresh
-        </Button>
+        {isMobile ? (
+          <IconButton size="small" onClick={refreshAll} sx={{ color: '#374151', border: '1px solid #d1d5db', borderRadius: 1 }}>
+            <Refresh sx={{ fontSize: 18 }} />
+          </IconButton>
+        ) : (
+          <Button
+            variant="outlined"
+            startIcon={<Refresh sx={{ fontSize: 16 }} />}
+            onClick={refreshAll}
+            size="small"
+            sx={{
+              borderColor: '#d1d5db',
+              color: '#374151',
+              '&:hover': { borderColor: '#16a34a', color: '#16a34a', bgcolor: 'transparent' },
+            }}
+          >
+            Refresh
+          </Button>
+        )}
       </Stack>
 
       {/* ── Easy Apply notice ── */}
       <Box
         sx={{
-          mb: 3,
-          p: 2,
+          mb: { xs: 2, md: 3 },
+          p: { xs: 1.5, md: 2 },
           borderRadius: 2,
           background: 'linear-gradient(135deg, rgba(20,83,45,0.06) 0%, rgba(6,182,212,0.06) 100%)',
           border: '1px solid rgba(22,163,74,0.2)',
           display: 'flex',
           alignItems: 'center',
           gap: 1.5,
-          flexWrap: 'wrap',
         }}
       >
-        <Box sx={{ fontSize: '1.1rem' }}>⚡</Box>
+        <Box sx={{ fontSize: '1rem', flexShrink: 0 }}>⚡</Box>
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography sx={{ fontSize: '0.875rem', fontWeight: 700, color: '#14532d' }}>
-            Currently optimised for LinkedIn Easy Apply
+          <Typography sx={{ fontSize: { xs: '0.82rem', md: '0.875rem' }, fontWeight: 700, color: '#14532d' }}>
+            Optimised for LinkedIn Easy Apply
           </Typography>
-          <Typography sx={{ fontSize: '0.8rem', color: '#64748b', mt: 0.2 }}>
-            External apply support is rolling out soon. For best results, make sure{' '}
+          <Typography sx={{ fontSize: { xs: '0.75rem', md: '0.8rem' }, color: '#64748b', mt: 0.2 }}>
+            Enable{' '}
             <Box component="span" sx={{ fontWeight: 700, color: '#0f172a' }}>"Easy Apply only"</Box>
-            {' '}is checked in your{' '}
+            {' '}in{' '}
             <Box
               component="a"
               href="/settings/search"
@@ -529,18 +543,20 @@ export function Dashboard() {
             >
               Search settings
             </Box>
-            .
+            {' '}for best results.
           </Typography>
         </Box>
         <Chip
-          label="External Apply — Coming Soon"
+          label="External — Soon"
           size="small"
           sx={{
+            display: { xs: 'none', sm: 'inline-flex' },
             bgcolor: 'rgba(6,182,212,0.1)',
             color: '#0891b2',
             fontWeight: 700,
             fontSize: '0.7rem',
             border: '1px solid rgba(6,182,212,0.25)',
+            flexShrink: 0,
           }}
         />
       </Box>
@@ -634,14 +650,16 @@ export function Dashboard() {
             </Stack>
           </Box>
 
-          <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap">
+          <Box sx={{ width: isMobile ? '100%' : 'auto' }}>
             <Select
               size="small"
               displayEmpty
               value={selectedResumeId}
               onChange={(e) => setSelectedResumeId(e.target.value as string)}
               sx={{
-                minWidth: 200,
+                width: isMobile ? '100%' : 'auto',
+                minWidth: { sm: 200 },
+                mb: isMobile ? 1.5 : 0,
                 bgcolor: 'rgba(255,255,255,0.06)',
                 color: '#d1fae5',
                 fontSize: '0.85rem',
@@ -656,64 +674,75 @@ export function Dashboard() {
               ))}
             </Select>
 
-            <Button
-              variant="contained"
-              disabled={loading}
-              onClick={startRun}
-              startIcon={<PlayArrow sx={{ fontSize: 16 }} />}
-              sx={{
-                bgcolor: '#fff',
-                color: '#15803d',
-                fontWeight: 700,
-                '&:hover': { bgcolor: '#f0fdf4' },
-                '&:disabled': { bgcolor: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.4)' },
-                background: '#fff',
-              }}
+            <Stack
+              direction="row"
+              spacing={1}
+              flexWrap="wrap"
+              sx={{ gap: 1, mt: isMobile ? 0 : 0 }}
             >
-              {loading ? 'Starting…' : 'Start Bot'}
-            </Button>
+              <Button
+                variant="contained"
+                disabled={loading}
+                onClick={startRun}
+                startIcon={<PlayArrow sx={{ fontSize: 16 }} />}
+                sx={{
+                  flex: isMobile ? 1 : 'none',
+                  bgcolor: '#fff',
+                  color: '#15803d',
+                  fontWeight: 700,
+                  '&:hover': { bgcolor: '#f0fdf4' },
+                  '&:disabled': { bgcolor: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.4)' },
+                  background: '#fff',
+                }}
+              >
+                {loading ? 'Starting…' : 'Start Bot'}
+              </Button>
 
-            <Button
-              variant="outlined"
-              onClick={() => setOutreachDialogOpen(true)}
-              sx={{
-                borderColor: 'rgba(255,255,255,0.2)',
-                color: '#d1fae5',
-                '&:hover': { borderColor: '#fff', bgcolor: 'rgba(255,255,255,0.06)' },
-              }}
-            >
-              Start Outreach
-            </Button>
+              <Button
+                variant="outlined"
+                onClick={() => setOutreachDialogOpen(true)}
+                sx={{
+                  flex: isMobile ? 1 : 'none',
+                  borderColor: 'rgba(255,255,255,0.2)',
+                  color: '#d1fae5',
+                  '&:hover': { borderColor: '#fff', bgcolor: 'rgba(255,255,255,0.06)' },
+                }}
+              >
+                Outreach
+              </Button>
 
-            {activeRun && (
-              <>
-                <Button
-                  variant="outlined"
-                  onClick={() => stopRun(activeRun.id)}
-                  startIcon={<Stop sx={{ fontSize: 16 }} />}
-                  sx={{
-                    borderColor: 'rgba(255,200,0,0.4)',
-                    color: '#fde68a',
-                    '&:hover': { borderColor: '#fde68a', bgcolor: 'rgba(253,230,138,0.08)' },
-                  }}
-                >
-                  Stop
-                </Button>
-                <Button
-                  variant="outlined"
-                  onClick={() => killRun(activeRun.id)}
-                  startIcon={<PowerSettingsNew sx={{ fontSize: 16 }} />}
-                  sx={{
-                    borderColor: 'rgba(239,68,68,0.4)',
-                    color: '#fca5a5',
-                    '&:hover': { borderColor: '#ef4444', bgcolor: 'rgba(239,68,68,0.08)' },
-                  }}
-                >
-                  Force Stop
-                </Button>
-              </>
-            )}
-          </Stack>
+              {activeRun && (
+                <>
+                  <Button
+                    variant="outlined"
+                    onClick={() => stopRun(activeRun.id)}
+                    startIcon={<Stop sx={{ fontSize: 16 }} />}
+                    sx={{
+                      flex: isMobile ? 1 : 'none',
+                      borderColor: 'rgba(255,200,0,0.4)',
+                      color: '#fde68a',
+                      '&:hover': { borderColor: '#fde68a', bgcolor: 'rgba(253,230,138,0.08)' },
+                    }}
+                  >
+                    Stop
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    onClick={() => killRun(activeRun.id)}
+                    startIcon={<PowerSettingsNew sx={{ fontSize: 16 }} />}
+                    sx={{
+                      flex: isMobile ? 1 : 'none',
+                      borderColor: 'rgba(239,68,68,0.4)',
+                      color: '#fca5a5',
+                      '&:hover': { borderColor: '#ef4444', bgcolor: 'rgba(239,68,68,0.08)' },
+                    }}
+                  >
+                    Kill
+                  </Button>
+                </>
+              )}
+            </Stack>
+          </Box>
         </Stack>
       </Box>
 
@@ -731,7 +760,7 @@ export function Dashboard() {
         {runs.length === 0 ? (
           <Box
             sx={{
-              p: 6,
+              p: { xs: 4, md: 6 },
               bgcolor: '#fff',
               border: '1px solid #e2e8f0',
               textAlign: 'center',
@@ -753,7 +782,85 @@ export function Dashboard() {
               Start Your First Run
             </Button>
           </Box>
+        ) : isMobile ? (
+          /* ── Mobile card list ── */
+          <>
+            <Stack spacing={1.5}>
+              {paginatedRuns.map((run) => {
+                const cfg = statusConfig[run.status] ?? statusConfig.pending
+                const isActive = run.status === 'running' || run.status === 'stopping'
+                return (
+                  <Box
+                    key={run.id}
+                    sx={{
+                      bgcolor: '#fff',
+                      border: '1px solid #e2e8f0',
+                      borderLeft: `3px solid ${cfg.color === 'success' ? '#16a34a' : cfg.color === 'error' ? '#ef4444' : cfg.color === 'warning' ? '#f59e0b' : '#94a3b8'}`,
+                      p: 2,
+                      '&:hover': { bgcolor: '#f8fdf9' },
+                    }}
+                  >
+                    <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 1 }}>
+                      <Stack direction="row" alignItems="center" spacing={1}>
+                        {isActive && (
+                          <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: '#4ade80', boxShadow: '0 0 6px #4ade80', flexShrink: 0 }} />
+                        )}
+                        <Typography sx={{ fontFamily: 'monospace', fontWeight: 700, color: '#0f172a', fontSize: '0.9rem' }}>
+                          #{run.id}
+                        </Typography>
+                        <Chip label={run.run_type ?? 'apply'} size="small" variant="outlined" sx={{ fontSize: '0.68rem', height: 20, borderColor: '#d1d5db', color: '#475569', textTransform: 'capitalize' }} />
+                      </Stack>
+                      <Chip label={cfg.label} color={cfg.color} size="small" variant="outlined" sx={{ fontSize: '0.72rem', fontWeight: 600, textTransform: 'capitalize', height: 22 }} />
+                    </Stack>
+
+                    <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.5 }}>
+                      <Typography sx={{ fontSize: '0.78rem', color: '#64748b' }}>
+                        {new Date(asUtc(run.started_at)).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </Typography>
+                      <Typography sx={{ fontSize: '0.78rem', color: '#94a3b8', fontVariantNumeric: 'tabular-nums' }}>
+                        {getDuration(run)}
+                      </Typography>
+                    </Stack>
+
+                    <Stack direction="row" spacing={1}>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        startIcon={<Terminal sx={{ fontSize: 13 }} />}
+                        onClick={() => openLogs(run.id)}
+                        sx={{ flex: 1, fontSize: '0.75rem', py: 0.5, borderColor: '#d1d5db', color: '#374151', '&:hover': { borderColor: '#16a34a', color: '#16a34a' } }}
+                      >
+                        View Logs
+                      </Button>
+                      {isActive && (
+                        <>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            startIcon={<Stop sx={{ fontSize: 13 }} />}
+                            onClick={() => stopRun(run.id)}
+                            sx={{ flex: 1, fontSize: '0.75rem', py: 0.5, borderColor: 'rgba(245,158,11,0.4)', color: '#d97706' }}
+                          >
+                            Stop
+                          </Button>
+                          <IconButton size="small" onClick={() => killRun(run.id)} title="Force stop" sx={{ color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)', p: 0.75 }}>
+                            <PowerSettingsNew sx={{ fontSize: 15 }} />
+                          </IconButton>
+                        </>
+                      )}
+                    </Stack>
+                  </Box>
+                )
+              })}
+            </Stack>
+            {totalPages > 1 && (
+              <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
+                <Pagination count={totalPages} page={currentPage} onChange={(_, page) => setRunsPage(page)} color="primary" shape="rounded" size="small" />
+              </Box>
+            )}
+          </>
         ) : (
+          /* ── Desktop table ── */
           <>
             <TableContainer
               component={Paper}
@@ -793,84 +900,30 @@ export function Dashboard() {
                           '&:last-child td': { borderBottom: 0 },
                         }}
                       >
-                        {/* Run # */}
                         <TableCell sx={{ py: 1.75 }}>
-                          <Typography
-                            sx={{
-                              fontFamily: 'monospace',
-                              fontWeight: 700,
-                              color: '#0f172a',
-                              fontSize: '0.85rem',
-                            }}
-                          >
+                          <Typography sx={{ fontFamily: 'monospace', fontWeight: 700, color: '#0f172a', fontSize: '0.85rem' }}>
                             #{run.id}
                           </Typography>
                         </TableCell>
-
-                        {/* Type */}
                         <TableCell>
-                          <Chip
-                            label={run.run_type ?? 'apply'}
-                            size="small"
-                            variant="outlined"
-                            sx={{
-                              fontSize: '0.72rem',
-                              textTransform: 'capitalize',
-                              borderColor: '#d1d5db',
-                              color: '#475569',
-                              height: 22,
-                            }}
-                          />
+                          <Chip label={run.run_type ?? 'apply'} size="small" variant="outlined" sx={{ fontSize: '0.72rem', textTransform: 'capitalize', borderColor: '#d1d5db', color: '#475569', height: 22 }} />
                         </TableCell>
-
-                        {/* Status */}
                         <TableCell>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                            {isActive && (
-                              <Box
-                                sx={{
-                                  width: 6,
-                                  height: 6,
-                                  borderRadius: '50%',
-                                  bgcolor: '#4ade80',
-                                  boxShadow: '0 0 6px #4ade80',
-                                  flexShrink: 0,
-                                }}
-                              />
-                            )}
-                            <Chip
-                              label={cfg.label}
-                              color={cfg.color}
-                              size="small"
-                              variant="outlined"
-                              sx={{
-                                fontSize: '0.72rem',
-                                fontWeight: 600,
-                                textTransform: 'capitalize',
-                                height: 22,
-                              }}
-                            />
+                            {isActive && <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: '#4ade80', boxShadow: '0 0 6px #4ade80', flexShrink: 0 }} />}
+                            <Chip label={cfg.label} color={cfg.color} size="small" variant="outlined" sx={{ fontSize: '0.72rem', fontWeight: 600, textTransform: 'capitalize', height: 22 }} />
                           </Box>
                         </TableCell>
-
-                        {/* Started */}
                         <TableCell>
                           <Typography sx={{ fontSize: '0.8rem', color: '#475569' }}>
-                            {new Date(asUtc(run.started_at)).toLocaleString(undefined, {
-                              month: 'short', day: 'numeric',
-                              hour: '2-digit', minute: '2-digit',
-                            })}
+                            {new Date(asUtc(run.started_at)).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                           </Typography>
                         </TableCell>
-
-                        {/* Duration */}
                         <TableCell>
                           <Typography sx={{ fontSize: '0.8rem', color: '#64748b', fontVariantNumeric: 'tabular-nums' }}>
                             {getDuration(run)}
                           </Typography>
                         </TableCell>
-
-                        {/* Actions */}
                         <TableCell>
                           <Stack direction="row" spacing={0.75} alignItems="center">
                             <Button
@@ -878,34 +931,16 @@ export function Dashboard() {
                               variant="outlined"
                               startIcon={<Terminal sx={{ fontSize: 13 }} />}
                               onClick={() => openLogs(run.id)}
-                              sx={{
-                                fontSize: '0.72rem',
-                                py: 0.4,
-                                px: 1,
-                                minWidth: 0,
-                                borderColor: '#d1d5db',
-                                color: '#374151',
-                                '&:hover': { borderColor: '#16a34a', color: '#16a34a', bgcolor: 'transparent' },
-                              }}
+                              sx={{ fontSize: '0.72rem', py: 0.4, px: 1, minWidth: 0, borderColor: '#d1d5db', color: '#374151', '&:hover': { borderColor: '#16a34a', color: '#16a34a', bgcolor: 'transparent' } }}
                             >
                               Logs
                             </Button>
                             {isActive && (
                               <>
-                                <IconButton
-                                  size="small"
-                                  onClick={() => stopRun(run.id)}
-                                  title="Stop gracefully"
-                                  sx={{ color: '#f59e0b', p: 0.5 }}
-                                >
+                                <IconButton size="small" onClick={() => stopRun(run.id)} title="Stop gracefully" sx={{ color: '#f59e0b', p: 0.5 }}>
                                   <Stop sx={{ fontSize: 16 }} />
                                 </IconButton>
-                                <IconButton
-                                  size="small"
-                                  onClick={() => killRun(run.id)}
-                                  title="Force stop"
-                                  sx={{ color: '#ef4444', p: 0.5 }}
-                                >
+                                <IconButton size="small" onClick={() => killRun(run.id)} title="Force stop" sx={{ color: '#ef4444', p: 0.5 }}>
                                   <PowerSettingsNew sx={{ fontSize: 16 }} />
                                 </IconButton>
                               </>
@@ -921,14 +956,7 @@ export function Dashboard() {
 
             {totalPages > 1 && (
               <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
-                <Pagination
-                  count={totalPages}
-                  page={currentPage}
-                  onChange={(_, page) => setRunsPage(page)}
-                  color="primary"
-                  shape="rounded"
-                  size="small"
-                />
+                <Pagination count={totalPages} page={currentPage} onChange={(_, page) => setRunsPage(page)} color="primary" shape="rounded" size="small" />
               </Box>
             )}
           </>

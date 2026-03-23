@@ -15,6 +15,8 @@ import {
   TextField,
   Tooltip,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material'
 import { Delete, Edit, DeleteSweep } from '@mui/icons-material'
 import { useEffect, useState } from 'react'
@@ -37,6 +39,8 @@ const TYPE_COLORS: Record<string, 'default' | 'primary' | 'success' | 'warning'>
 }
 
 export function LearnedAnswersPage() {
+  const theme = useTheme()
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
   const [items, setItems] = useState<LearnedAnswer[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -201,7 +205,7 @@ export function LearnedAnswersPage() {
       )}
 
       {/* Edit dialog */}
-      <Dialog open={editIndex !== null} onClose={() => setEditIndex(null)} maxWidth="sm" fullWidth>
+      <Dialog open={editIndex !== null} onClose={() => setEditIndex(null)} maxWidth="sm" fullWidth fullScreen={isMobile}>
         <DialogTitle sx={{ fontWeight: 700, pb: 1 }}>Edit Answer</DialogTitle>
         <DialogContent>
           {editIndex !== null && (

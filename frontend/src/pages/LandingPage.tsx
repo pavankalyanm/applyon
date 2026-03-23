@@ -10,6 +10,8 @@ import {
   Toolbar,
   Tooltip,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material'
 import {
   ArrowForward,
@@ -102,7 +104,7 @@ function CopyableCommand({ command }: { command: string }) {
     >
       <Typography
         component="code"
-        sx={{ fontFamily: 'monospace', fontSize: '0.82rem', color: '#86efac', flexGrow: 1 }}
+        sx={{ fontFamily: 'monospace', fontSize: { xs: '0.72rem', sm: '0.82rem' }, color: '#86efac', flexGrow: 1, wordBreak: 'break-all', lineHeight: 1.5 }}
       >
         {command}
       </Typography>
@@ -151,6 +153,8 @@ const installStepsShared = [
 
 export function LandingPage() {
   const navigate = useNavigate()
+  const theme = useTheme()
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'))
   const [scrollY, setScrollY] = useState(0)
   const [logIndex, setLogIndex] = useState(0)
   const [osTab, setOsTab] = useState<'mac' | 'windows'>('mac')
@@ -241,11 +245,11 @@ export function LandingPage() {
     }, 1400)
     return () => window.clearInterval(id)
   }, [termLines])
-  const heroProgress = Math.min(scrollY / 900, 1.1)
-  const heroTextShift = Math.min(scrollY * 0.18, 120)
-  const heroPanelShift = Math.min(scrollY * 0.14, 110)
-  const heroPanelRotateX = Math.min(scrollY * 0.02, 12)
-  const heroPanelRotateY = Math.max(-10, -scrollY * 0.018)
+  const heroProgress = isMobile ? 0 : Math.min(scrollY / 900, 1.1)
+  const heroTextShift = isMobile ? 0 : Math.min(scrollY * 0.18, 120)
+  const heroPanelShift = isMobile ? 0 : Math.min(scrollY * 0.14, 110)
+  const heroPanelRotateX = isMobile ? 0 : Math.min(scrollY * 0.02, 12)
+  const heroPanelRotateY = isMobile ? 0 : Math.max(-10, -scrollY * 0.018)
 
   return (
     <Box
@@ -287,24 +291,25 @@ export function LandingPage() {
               ApplyFlow AI
             </Typography>
           </Stack>
-          <Stack direction="row" spacing={1.5}>
+          <Stack direction="row" spacing={1}>
             <Button
               variant="text"
               onClick={() => navigate('/auth')}
-              sx={{ color: '#475569', fontWeight: 700 }}
+              sx={{ color: '#475569', fontWeight: 700, display: { xs: 'none', sm: 'inline-flex' } }}
             >
               Login
             </Button>
             <Button
               variant="contained"
               onClick={() => navigate('/auth')}
-              endIcon={<ArrowForward />}
+              endIcon={<ArrowForward sx={{ fontSize: { xs: 14, sm: 16 } }} />}
               sx={{
-                px: 2.5,
+                px: { xs: 1.8, sm: 2.5 },
+                fontSize: { xs: '0.82rem', sm: '0.875rem' },
                 borderRadius: '5px',
                 fontWeight: 800,
                 background: 'linear-gradient(135deg, #14532d 0%, #16a34a 60%, #22c55e 100%)',
-                boxShadow: '0 18px 40px rgba(22,163,74,0.24)',
+                boxShadow: '0 8px 24px rgba(22,163,74,0.24)',
               }}
             >
               Get Started
@@ -337,6 +342,7 @@ export function LandingPage() {
               left: { xs: '-10%', md: '3%' },
               width: { xs: 220, md: 340 },
               height: { xs: 220, md: 340 },
+              display: { xs: 'none', md: 'block' },
               transform: `translate3d(0, ${scrollY * -0.18}px, 0) rotateZ(${heroProgress * -4}deg)`,
             }}
           >
@@ -359,6 +365,7 @@ export function LandingPage() {
               right: { xs: '-8%', md: '9%' },
               width: { xs: 180, md: 280 },
               height: { xs: 180, md: 280 },
+              display: { xs: 'none', md: 'block' },
               transform: `translate3d(0, ${scrollY * -0.26}px, 0) rotateZ(${heroProgress * 6}deg)`,
             }}
           >
@@ -393,6 +400,7 @@ export function LandingPage() {
             position: { xs: 'relative', lg: 'sticky' },
             top: { lg: 82 },
             zIndex: 1,
+            px: { xs: 2, sm: 3, md: 4 },
           }}
         >
           <Box
@@ -430,9 +438,9 @@ export function LandingPage() {
                   variant="h1"
                   sx={{
                     color: '#0f172a',
-                    fontSize: { xs: '2.8rem', sm: '3.5rem', md: '4.9rem' },
-                    lineHeight: 0.95,
-                    letterSpacing: '-0.06em',
+                    fontSize: { xs: '2.4rem', sm: '3.2rem', md: '4.9rem' },
+                    lineHeight: { xs: 1.05, md: 0.95 },
+                    letterSpacing: { xs: '-0.04em', md: '-0.06em' },
                     fontWeight: 900,
                     maxWidth: 760,
                   }}
@@ -465,19 +473,20 @@ export function LandingPage() {
                   shows real-time bot logs, and gives you a clean command center for every run, every job, and every outcome.
                 </Typography>
 
-                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
                   <Button
                     variant="contained"
                     size="large"
                     endIcon={<ArrowForward />}
                     onClick={() => navigate('/auth')}
+                    fullWidth={isMobile}
                     sx={{
-                      px: 4,
-                      py: 1.6,
+                      px: { xs: 3, sm: 4 },
+                      py: 1.5,
                       borderRadius: '5px',
                       fontWeight: 800,
                       background: 'linear-gradient(135deg, #14532d 0%, #16a34a 60%, #22c55e 100%)',
-                      boxShadow: '0 20px 44px rgba(22,163,74,0.28)',
+                      boxShadow: '0 16px 36px rgba(22,163,74,0.28)',
                     }}
                   >
                     Start Applying Free
@@ -485,10 +494,11 @@ export function LandingPage() {
                   <Button
                     variant="outlined"
                     size="large"
+                    fullWidth={isMobile}
                     onClick={() => document.getElementById('product-story')?.scrollIntoView({ behavior: 'smooth' })}
                     sx={{
-                      px: 4,
-                      py: 1.6,
+                      px: { xs: 3, sm: 4 },
+                      py: 1.5,
                       borderRadius: '5px',
                       borderColor: 'rgba(15,23,42,0.12)',
                       color: '#0f172a',
@@ -496,35 +506,35 @@ export function LandingPage() {
                       backdropFilter: 'blur(12px)',
                     }}
                   >
-                    Explore the Workflow
+                    See How It Works
                   </Button>
                 </Stack>
 
-                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ pt: 0.5, flexWrap: 'wrap' }}>
+                <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1.5, pt: 0.5 }}>
                   {stats.map((stat) => (
                     <Paper
                       key={stat.label}
                       elevation={0}
                       sx={{
-                        px: 2.2,
-                        py: 1.6,
-                        minWidth: 150,
+                        px: { xs: 1.5, sm: 2.2 },
+                        py: { xs: 1.25, sm: 1.6 },
                         borderRadius: '5px',
                         bgcolor: 'rgba(255,255,255,0.74)',
                         backdropFilter: 'blur(14px)',
                         border: '1px solid rgba(148,163,184,0.18)',
                       }}
                     >
-                      <Typography sx={{ color: '#0f172a', fontWeight: 900, fontSize: '1.25rem' }}>{stat.value}</Typography>
-                      <Typography sx={{ color: '#64748b', fontSize: '0.88rem' }}>{stat.label}</Typography>
+                      <Typography sx={{ color: '#0f172a', fontWeight: 900, fontSize: { xs: '1rem', sm: '1.25rem' } }}>{stat.value}</Typography>
+                      <Typography sx={{ color: '#64748b', fontSize: { xs: '0.72rem', sm: '0.88rem' } }}>{stat.label}</Typography>
                     </Paper>
                   ))}
-                </Stack>
+                </Box>
               </Stack>
             </Box>
 
             <Box
               sx={{
+                display: { xs: 'none', lg: 'block' },
                 position: 'relative',
                 transform: `translate3d(0, ${-heroPanelShift}px, ${heroProgress * 24}px) rotateX(${heroPanelRotateX}deg) rotateY(${heroPanelRotateY}deg)`,
                 transformStyle: 'preserve-3d',
@@ -713,12 +723,12 @@ export function LandingPage() {
         id="product-story"
         ref={productStoryRef}
         sx={{
-          py: { xs: 8, md: 12 },
+          py: { xs: 6, md: 12 },
           position: 'relative',
           overflow: 'hidden',
         }}
       >
-        <Container maxWidth="xl">
+        <Container maxWidth="xl" sx={{ px: { xs: 2, sm: 3, md: 4 } }}>
           <Box
             sx={{
               position: 'absolute',
@@ -785,7 +795,7 @@ export function LandingPage() {
                     key={card.title}
                     className="slide-up"
                     sx={{
-                      transform: `translate3d(${(index % 2 === 0 ? -1 : 1) * (1 - sectionProgress.productStory) * 18}px, ${(1 - sectionProgress.productStory) * (44 + index * 8)}px, 0) scale(${0.95 + sectionProgress.productStory * 0.05})`,
+                      transform: isMobile ? 'none' : `translate3d(${(index % 2 === 0 ? -1 : 1) * (1 - sectionProgress.productStory) * 18}px, ${(1 - sectionProgress.productStory) * (44 + index * 8)}px, 0) scale(${0.95 + sectionProgress.productStory * 0.05})`,
                       transition: 'transform 0.16s linear',
                     }}
                   >
@@ -1028,8 +1038,8 @@ export function LandingPage() {
       </Box>
 
       {/* ── Jobcook Install Section ──────────────────────────────────────── */}
-      <Box sx={{ py: { xs: 8, md: 12 }, position: 'relative', overflow: 'hidden' }}>
-        <Container maxWidth="xl">
+      <Box sx={{ py: { xs: 6, md: 12 }, position: 'relative', overflow: 'hidden' }}>
+        <Container maxWidth="xl" sx={{ px: { xs: 2, sm: 3, md: 4 } }}>
           <Stack spacing={6}>
             <Stack spacing={1.5} alignItems="center" textAlign="center">
               <Chip
@@ -1185,11 +1195,13 @@ export function LandingPage() {
               <Box
                 sx={{
                   bgcolor: '#0f172a',
-                  p: { xs: 2, md: 3 },
+                  p: { xs: 1.5, md: 3 },
                   minHeight: 200,
                   fontFamily: 'monospace',
-                  fontSize: { xs: '0.78rem', md: '0.875rem' },
+                  fontSize: { xs: '0.72rem', md: '0.875rem' },
                   lineHeight: 1.9,
+                  overflowX: 'auto',
+                  '& span': { whiteSpace: 'pre-wrap', wordBreak: 'break-all' },
                 }}
               >
                 {termLines.slice(0, termStep + 1).map((line, i) => (
@@ -1264,7 +1276,7 @@ export function LandingPage() {
         </Container>
       </Box>
 
-      <Box ref={ctaRef} sx={{ py: { xs: 8, md: 10 }, position: 'relative', overflow: 'hidden' }}>
+      <Box ref={ctaRef} sx={{ py: { xs: 5, md: 10 }, position: 'relative', overflow: 'hidden' }}>
         <Container maxWidth="md">
           <Box
             sx={{
@@ -1324,8 +1336,9 @@ export function LandingPage() {
                 size="large"
                 endIcon={<ArrowForward />}
                 onClick={() => navigate('/auth')}
+                fullWidth={isMobile}
                 sx={{
-                  px: 4.5,
+                  px: { xs: 3, sm: 4.5 },
                   py: 1.6,
                   borderRadius: '5px',
                   fontWeight: 900,

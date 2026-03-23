@@ -1,4 +1,4 @@
-import { Box, Button, Stack, Tab, Tabs, Typography } from '@mui/material'
+import { Box, Button, IconButton, Stack, Tab, Tabs, Tooltip, Typography, useMediaQuery, useTheme } from '@mui/material'
 import { CheckCircle, Save } from '@mui/icons-material'
 import { useNavigate, useLocation, Outlet, useOutletContext } from 'react-router-dom'
 import { useSettingsConfig } from './useSettingsConfig'
@@ -48,6 +48,8 @@ export function SettingsLayout() {
   const navigate = useNavigate()
   const location = useLocation()
   const cfg = useSettingsConfig()
+  const theme = useTheme()
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
 
   const activeSection = sections.find((s) => location.pathname.endsWith(`/${s.key}`))?.key ?? 'personals'
 
@@ -56,53 +58,79 @@ export function SettingsLayout() {
       {/* ── Page header ── */}
       <Box
         sx={{
-          px: { xs: 3, md: 4 },
-          pt: 4,
+          px: { xs: 2, sm: 3, md: 4 },
+          pt: { xs: 2.5, md: 4 },
           pb: 0,
           bgcolor: 'transparent',
         }}
       >
-        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 3 }}>
+        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" gap={2} sx={{ mb: 3 }}>
           <Box>
             <Typography
-              variant="h4"
+              variant={isMobile ? 'h5' : 'h4'}
               sx={{ color: '#0f172a', fontWeight: 800, letterSpacing: '-0.02em' }}
             >
               Settings
             </Typography>
-            <Typography color="text.secondary" sx={{ mt: 0.5, fontSize: '0.9rem' }}>
-              Manage all configuration for your ApplyFlow AI bot.
-            </Typography>
+            {!isMobile && (
+              <Typography color="text.secondary" sx={{ mt: 0.5, fontSize: '0.9rem' }}>
+                Manage all configuration for your ApplyFlow AI bot.
+              </Typography>
+            )}
           </Box>
 
-          {/* Save buttons */}
-          <Stack direction="row" spacing={1.5} alignItems="center">
-            <Button
-              variant="outlined"
-              startIcon={<Save sx={{ fontSize: 16 }} />}
-              disabled={cfg.saving || !cfg.canSave || cfg.loading}
-              onClick={cfg.saveAll}
-              size="small"
-              sx={{
-                borderColor: '#d1d5db',
-                color: '#374151',
-                '&:hover': { borderColor: '#16a34a', color: '#16a34a', bgcolor: 'transparent' },
-              }}
-            >
-              {cfg.saving ? 'Saving…' : 'Save'}
-            </Button>
-            <Button
-              variant="contained"
-              startIcon={<CheckCircle sx={{ fontSize: 16 }} />}
-              disabled={cfg.saving || !cfg.canSave || cfg.loading}
-              onClick={async () => {
-                await cfg.saveAll()
-                navigate('/dashboard')
-              }}
-              size="small"
-            >
-              Save & close
-            </Button>
+          {/* Save buttons — icon-only on mobile, full text on desktop */}
+          <Stack direction="row" spacing={1} alignItems="center" flexShrink={0}>
+            {isMobile ? (
+              <>
+                <Tooltip title={cfg.saving ? 'Saving…' : 'Save'}>
+                  <span>
+                    <IconButton
+                      size="small"
+                      disabled={cfg.saving || !cfg.canSave || cfg.loading}
+                      onClick={cfg.saveAll}
+                      sx={{ border: '1px solid #d1d5db', color: '#374151', borderRadius: 1, p: 0.75 }}
+                    >
+                      <Save sx={{ fontSize: 18 }} />
+                    </IconButton>
+                  </span>
+                </Tooltip>
+                <Tooltip title="Save & go to Dashboard">
+                  <span>
+                    <IconButton
+                      size="small"
+                      disabled={cfg.saving || !cfg.canSave || cfg.loading}
+                      onClick={async () => { await cfg.saveAll(); navigate('/dashboard') }}
+                      sx={{ bgcolor: '#16a34a', color: '#fff', borderRadius: 1, p: 0.75, '&:hover': { bgcolor: '#15803d' }, '&:disabled': { bgcolor: '#d1d5db' } }}
+                    >
+                      <CheckCircle sx={{ fontSize: 18 }} />
+                    </IconButton>
+                  </span>
+                </Tooltip>
+              </>
+            ) : (
+              <>
+                <Button
+                  variant="outlined"
+                  startIcon={<Save sx={{ fontSize: 16 }} />}
+                  disabled={cfg.saving || !cfg.canSave || cfg.loading}
+                  onClick={cfg.saveAll}
+                  size="small"
+                  sx={{ borderColor: '#d1d5db', color: '#374151', '&:hover': { borderColor: '#16a34a', color: '#16a34a', bgcolor: 'transparent' } }}
+                >
+                  {cfg.saving ? 'Saving…' : 'Save'}
+                </Button>
+                <Button
+                  variant="contained"
+                  startIcon={<CheckCircle sx={{ fontSize: 16 }} />}
+                  disabled={cfg.saving || !cfg.canSave || cfg.loading}
+                  onClick={async () => { await cfg.saveAll(); navigate('/dashboard') }}
+                  size="small"
+                >
+                  Save & close
+                </Button>
+              </>
+            )}
           </Stack>
         </Stack>
 
@@ -120,13 +148,13 @@ export function SettingsLayout() {
           }}
           sx={{
             borderBottom: '2px solid #e2e8f0',
-            minHeight: 42,
+            minHeight: { xs: 38, md: 42 },
             '& .MuiTab-root': {
-              minHeight: 42,
-              fontSize: '0.82rem',
+              minHeight: { xs: 38, md: 42 },
+              fontSize: { xs: '0.76rem', md: '0.82rem' },
               fontWeight: 500,
               textTransform: 'none',
-              px: 2.5,
+              px: { xs: 1.5, md: 2.5 },
               py: 0,
               color: '#64748b',
               '&.Mui-selected': {
@@ -146,10 +174,10 @@ export function SettingsLayout() {
       <Box
         sx={{
           flex: 1,
-          mx: { xs: 3, md: 4 },
-          mt: 3,
-          mb: 4,
-          p: { xs: 3, md: 4 },
+          mx: { xs: 2, sm: 3, md: 4 },
+          mt: { xs: 2, md: 3 },
+          mb: { xs: 3, md: 4 },
+          p: { xs: 2, sm: 3, md: 4 },
           bgcolor: '#fff',
           border: '1px solid #e2e8f0',
         }}

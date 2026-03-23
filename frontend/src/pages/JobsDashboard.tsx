@@ -3,6 +3,7 @@ import {
   Button,
   Chip,
   FormControl,
+  IconButton,
   InputLabel,
   MenuItem,
   Paper,
@@ -19,6 +20,8 @@ import {
   ToggleButton,
   ToggleButtonGroup,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material'
 import { OpenInNew, Refresh, TableRows, ViewKanban } from '@mui/icons-material'
 import { useEffect, useMemo, useState } from 'react'
@@ -94,6 +97,8 @@ function matchesPipelineBucket(job: JobApplication, status: PipelineStatus) {
 }
 
 export function JobsDashboard() {
+  const theme = useTheme()
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
   const [jobs, setJobs] = useState<JobApplication[]>([])
   const [page, setPage] = useState(0)
   const rowsPerPage = 25
@@ -146,31 +151,39 @@ export function JobsDashboard() {
   const failedCount = jobs.filter((job) => job.status === 'failed').length
 
   return (
-    <Box sx={{ p: { xs: 3, md: 4 }, minHeight: '100%' }}>
+    <Box sx={{ p: { xs: 2, sm: 3, md: 4 }, minHeight: '100%' }}>
       {/* ── Page header ── */}
-      <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 4 }}>
+      <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: { xs: 2.5, md: 4 } }}>
         <Box>
-          <Typography variant="h4" sx={{ color: '#0f172a', fontWeight: 800, letterSpacing: '-0.02em' }}>
+          <Typography variant={isMobile ? 'h5' : 'h4'} sx={{ color: '#0f172a', fontWeight: 800, letterSpacing: '-0.02em' }}>
             Jobs
           </Typography>
-          <Typography color="text.secondary" sx={{ mt: 0.5, fontSize: '0.9rem' }}>
-            Track every application, update pipeline status, and jump to the original listing.
-          </Typography>
+          {!isMobile && (
+            <Typography color="text.secondary" sx={{ mt: 0.5, fontSize: '0.9rem' }}>
+              Track every application, update pipeline status, and jump to the original listing.
+            </Typography>
+          )}
         </Box>
-        <Button
-          variant="outlined"
-          startIcon={<Refresh sx={{ fontSize: 16 }} />}
-          onClick={loadJobs}
-          disabled={loading}
-          size="small"
-          sx={{
-            borderColor: '#d1d5db',
-            color: '#374151',
-            '&:hover': { borderColor: '#16a34a', color: '#16a34a', bgcolor: 'transparent' },
-          }}
-        >
-          {loading ? 'Refreshing…' : 'Refresh'}
-        </Button>
+        {isMobile ? (
+          <IconButton size="small" onClick={loadJobs} disabled={loading} sx={{ color: '#374151', border: '1px solid #d1d5db', borderRadius: 1 }}>
+            <Refresh sx={{ fontSize: 18 }} />
+          </IconButton>
+        ) : (
+          <Button
+            variant="outlined"
+            startIcon={<Refresh sx={{ fontSize: 16 }} />}
+            onClick={loadJobs}
+            disabled={loading}
+            size="small"
+            sx={{
+              borderColor: '#d1d5db',
+              color: '#374151',
+              '&:hover': { borderColor: '#16a34a', color: '#16a34a', bgcolor: 'transparent' },
+            }}
+          >
+            {loading ? 'Refreshing…' : 'Refresh'}
+          </Button>
+        )}
       </Stack>
 
       {/* ── Pipeline stat cards ── */}
@@ -244,75 +257,144 @@ export function JobsDashboard() {
       </Box>
 
       {/* ── Filters row ── */}
-      <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} sx={{ mb: 3 }} alignItems="stretch">
-        <TextField
-          placeholder="Search by title, company, location, or job ID…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          size="small"
-          sx={{ flex: 1 }}
-        />
-
-        <FormControl size="small" sx={{ minWidth: 160 }}>
-          <InputLabel>Pipeline status</InputLabel>
-          <Select
-            value={pipelineFilter}
-            label="Pipeline status"
-            onChange={(e) => setPipelineFilter(e.target.value)}
+      <Stack spacing={1.5} sx={{ mb: 3 }}>
+        <Stack direction="row" spacing={1.5} alignItems="stretch">
+          <TextField
+            placeholder={isMobile ? 'Search…' : 'Search by title, company, location, or job ID…'}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            size="small"
+            sx={{ flex: 1 }}
+          />
+          <ToggleButtonGroup
+            exclusive
+            value={view}
+            onChange={(_, next) => { if (next) setView(next) }}
+            size="small"
+            sx={{ '& .MuiToggleButton-root': { px: isMobile ? 1.25 : 2, fontSize: '0.82rem' } }}
           >
-            <MenuItem value="all">All statuses</MenuItem>
-            {pipelineStatuses.map((s) => (
-              <MenuItem key={s} value={s}>{pipelineLabels[s]}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+            <ToggleButton value="table">
+              <TableRows sx={{ fontSize: 16, mr: isMobile ? 0 : 0.75 }} />
+              {!isMobile && 'Table'}
+            </ToggleButton>
+            <ToggleButton value="board">
+              <ViewKanban sx={{ fontSize: 16, mr: isMobile ? 0 : 0.75 }} />
+              {!isMobile && 'Board'}
+            </ToggleButton>
+          </ToggleButtonGroup>
+        </Stack>
 
-        <FormControl size="small" sx={{ minWidth: 140 }}>
-          <InputLabel>Run result</InputLabel>
-          <Select
-            value={botStatusFilter}
-            label="Run result"
-            onChange={(e) => setBotStatusFilter(e.target.value)}
-          >
-            <MenuItem value="all">All results</MenuItem>
-            <MenuItem value="applied">Applied</MenuItem>
-            <MenuItem value="failed">Failed</MenuItem>
-          </Select>
-        </FormControl>
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(3, auto)' }, gap: 1.5 }}>
+          <FormControl size="small" fullWidth>
+            <InputLabel>Pipeline</InputLabel>
+            <Select value={pipelineFilter} label="Pipeline" onChange={(e) => setPipelineFilter(e.target.value)}>
+              <MenuItem value="all">All</MenuItem>
+              {pipelineStatuses.map((s) => (
+                <MenuItem key={s} value={s}>{pipelineLabels[s]}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
 
-        <FormControl size="small" sx={{ minWidth: 180 }}>
-          <InputLabel>Provider</InputLabel>
-          <Select
-            value={providerFilter}
-            label="Provider"
-            onChange={(e) => setProviderFilter(e.target.value)}
-          >
-            {providerOptions.map((o) => (
-              <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+          <FormControl size="small" fullWidth>
+            <InputLabel>Result</InputLabel>
+            <Select value={botStatusFilter} label="Result" onChange={(e) => setBotStatusFilter(e.target.value)}>
+              <MenuItem value="all">All</MenuItem>
+              <MenuItem value="applied">Applied</MenuItem>
+              <MenuItem value="failed">Failed</MenuItem>
+            </Select>
+          </FormControl>
 
-        <ToggleButtonGroup
-          exclusive
-          value={view}
-          onChange={(_, next) => { if (next) setView(next) }}
-          size="small"
-          sx={{
-            '& .MuiToggleButton-root': { px: 2, fontSize: '0.82rem' },
-          }}
-        >
-          <ToggleButton value="table">
-            <TableRows sx={{ fontSize: 16, mr: 0.75 }} /> Table
-          </ToggleButton>
-          <ToggleButton value="board">
-            <ViewKanban sx={{ fontSize: 16, mr: 0.75 }} /> Board
-          </ToggleButton>
-        </ToggleButtonGroup>
+          <FormControl size="small" sx={{ gridColumn: { xs: '1 / -1', md: 'auto' } }}>
+            <InputLabel>Provider</InputLabel>
+            <Select value={providerFilter} label="Provider" onChange={(e) => setProviderFilter(e.target.value)}>
+              {providerOptions.map((o) => (
+                <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </Box>
       </Stack>
 
-      {/* ── Table view ── */}
-      {view === 'table' ? (
+      {/* ── Table / Card view ── */}
+      {view === 'table' && isMobile ? (
+        /* ── Mobile card list ── */
+        <>
+          {visibleJobs.length === 0 ? (
+            <Box sx={{ p: 4, bgcolor: '#fff', border: '1px solid #e2e8f0', textAlign: 'center', color: '#64748b', fontSize: '0.9rem' }}>
+              No jobs matched the current filters.
+            </Box>
+          ) : (
+            <Stack spacing={1.5}>
+              {visibleJobs.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((job) => (
+                <Box
+                  key={job.id}
+                  sx={{
+                    bgcolor: '#fff',
+                    border: '1px solid #e2e8f0',
+                    borderLeft: `3px solid ${job.status === 'applied' ? '#16a34a' : '#ef4444'}`,
+                    p: 2,
+                  }}
+                >
+                  <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 1 }}>
+                    <Box sx={{ flex: 1, minWidth: 0, pr: 1 }}>
+                      <Typography sx={{ fontWeight: 700, color: '#0f172a', fontSize: '0.9rem', lineHeight: 1.3 }}>
+                        {job.title || 'Untitled job'}
+                      </Typography>
+                      <Typography sx={{ color: '#475569', fontSize: '0.8rem' }}>
+                        {job.company || 'Unknown'}{job.location ? ` · ${job.location}` : ''}
+                      </Typography>
+                    </Box>
+                    <Chip
+                      label={job.status}
+                      color={job.status === 'applied' ? 'success' : 'error'}
+                      size="small"
+                      variant="outlined"
+                      sx={{ fontSize: '0.68rem', height: 20, textTransform: 'capitalize', flexShrink: 0 }}
+                    />
+                  </Stack>
+
+                  {job.reason_skipped && (
+                    <Typography sx={{ color: '#dc2626', fontSize: '0.72rem', mb: 0.75 }}>{job.reason_skipped}</Typography>
+                  )}
+
+                  <Stack direction="row" spacing={0.5} flexWrap="wrap" sx={{ gap: 0.5, mb: 1.25 }}>
+                    <Chip label={providerLabel(job.application_provider)} size="small" variant="outlined" sx={{ fontSize: '0.68rem', height: 20, borderColor: '#d1d5db' }} />
+                    <Chip label={job.application_stage || 'submitted'} size="small" color={job.application_stage === 'review_pending' ? 'warning' : 'default'} sx={{ fontSize: '0.68rem', height: 20, textTransform: 'capitalize' }} />
+                    <Typography sx={{ fontSize: '0.72rem', color: '#94a3b8', alignSelf: 'center' }}>#{job.run_id}</Typography>
+                  </Stack>
+
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <FormControl size="small" sx={{ flex: 1 }}>
+                      <Select
+                        value={job.pipeline_status}
+                        onChange={(e) => updatePipelineStatus(job.id, e.target.value as PipelineStatus)}
+                        sx={{ fontSize: '0.78rem' }}
+                      >
+                        {pipelineStatuses.map((s) => (
+                          <MenuItem key={s} value={s}>{pipelineLabels[s]}</MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                    {job.job_link && (
+                      <IconButton size="small" href={job.job_link} target="_blank" rel="noreferrer" sx={{ color: '#374151', border: '1px solid #d1d5db', p: 0.75 }}>
+                        <OpenInNew sx={{ fontSize: 15 }} />
+                      </IconButton>
+                    )}
+                  </Stack>
+                </Box>
+              ))}
+            </Stack>
+          )}
+          <TablePagination
+            component="div"
+            count={visibleJobs.length}
+            page={page}
+            onPageChange={(_, p) => setPage(p)}
+            rowsPerPage={rowsPerPage}
+            rowsPerPageOptions={[rowsPerPage]}
+          />
+        </>
+      ) : view === 'table' ? (
         <TableContainer
           component={Paper}
           sx={{ border: '1px solid #e2e8f0', boxShadow: 'none' }}
@@ -342,7 +424,7 @@ export function JobsDashboard() {
               {visibleJobs.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((job) => (
                 <TableRow key={job.id} hover sx={{ '&:hover': { bgcolor: '#f8fdf9' }, '&:last-child td': { borderBottom: 0 } }}>
                   {/* Job */}
-                  <TableCell sx={{ minWidth: 260, py: 2 }}>
+                  <TableCell sx={{ minWidth: { xs: 140, sm: 200, md: 260 }, py: 2 }}>
                     <Typography sx={{ fontWeight: 700, color: '#0f172a', fontSize: '0.875rem' }}>
                       {job.title || 'Untitled job'}
                     </Typography>
@@ -360,7 +442,7 @@ export function JobsDashboard() {
                   </TableCell>
 
                   {/* Provider */}
-                  <TableCell sx={{ minWidth: 180 }}>
+                  <TableCell sx={{ minWidth: { xs: 110, md: 180 } }}>
                     <Stack spacing={0.75}>
                       <Chip
                         label={providerLabel(job.application_provider)}
@@ -388,7 +470,7 @@ export function JobsDashboard() {
 
                   {/* Pipeline status */}
                   <TableCell>
-                    <FormControl size="small" sx={{ minWidth: 150 }}>
+                    <FormControl size="small" sx={{ minWidth: { xs: 110, md: 150 } }}>
                       <Select
                         value={job.pipeline_status}
                         onChange={(e) => updatePipelineStatus(job.id, e.target.value as PipelineStatus)}
