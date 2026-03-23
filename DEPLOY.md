@@ -1,7 +1,7 @@
 # AWS Deployment Guide
 
 Architecture: EC2 (frontend + backend) · RDS MySQL (database)
-Access via EC2 public IP — no domain required.
+Domain: applyflowai.com → EC2 (3.131.96.109) · SSL via Let's Encrypt
 
 ---
 
@@ -28,7 +28,7 @@ RDS MySQL  (private, only reachable from EC2)
 2. Engine: **MySQL 8.0**
 3. Template: **Free tier** (for testing) or **Production**
 4. Settings:
-   - DB instance identifier: `autoapply-db`
+   - DB instance identifier: `applyflowai-db`
    - Master username: `admin`
    - Master password: choose a strong password
 5. Instance class: `db.t3.micro` (free tier)
@@ -39,7 +39,7 @@ RDS MySQL  (private, only reachable from EC2)
 
 ### 1.2 Note the endpoint
 
-After creation, note the **Endpoint** (looks like `autoapply-db.xxxx.us-east-1.rds.amazonaws.com`).
+After creation, note the **Endpoint** (looks like `applyflowai-db.xxxx.us-east-1.rds.amazonaws.com`).
 
 ### 1.3 Security group for RDS
 
@@ -56,17 +56,17 @@ After creation, note the **Endpoint** (looks like `autoapply-db.xxxx.us-east-1.r
 ### 2.1 Launch EC2
 
 1. Go to **EC2 → Launch instance**
-2. Name: `autoapply-server`
+2. Name: `applyflowai-server`
 3. AMI: **Ubuntu Server 22.04 LTS**
 4. Instance type: `t3.small` (2 vCPU, 2GB RAM — minimum for this stack)
 5. Key pair: create or select existing
 6. Security group — add inbound rules:
 
-| Port | Protocol | Source | Purpose |
-|---|---|---|---|
-| 22 | TCP | Your IP | SSH |
-| 80 | TCP | 0.0.0.0/0 | HTTP (frontend) |
-| 8000 | TCP | 0.0.0.0/0 | Backend API (for Jobcook agent WebSocket) |
+| Port | Protocol | Source    | Purpose                                   |
+| ---- | -------- | --------- | ----------------------------------------- |
+| 22   | TCP      | Your IP   | SSH                                       |
+| 80   | TCP      | 0.0.0.0/0 | HTTP (frontend)                           |
+| 8000 | TCP      | 0.0.0.0/0 | Backend API (for Jobcook agent WebSocket) |
 
 7. Storage: 20 GB gp3
 8. Launch
@@ -112,7 +112,7 @@ mysql -h <RDS_ENDPOINT> -u admin -p
 ```
 
 ```sql
-CREATE DATABASE `autoapply` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE `applyon` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 EXIT;
 ```
 
@@ -139,11 +139,11 @@ nano backend/.env
 Fill in the values (see reference below):
 
 ```env
-DATABASE_URL=mysql+pymysql://admin:YOUR_RDS_PASSWORD@YOUR_RDS_ENDPOINT:3306/autoapply
+DATABASE_URL=mysql+pymysql://admin:YOUR_RDS_PASSWORD@YOUR_RDS_ENDPOINT:3306/applyon
 JWT_SECRET=replace-with-long-random-string
 JWT_EXPIRES_MIN=10080
 RESUME_STORAGE_DIR=/home/ubuntu/app/storage/resumes
-CORS_ORIGINS=http://<EC2_PUBLIC_IP>
+CORS_ORIGINS=https://applyflowai.com
 ```
 
 Create resume storage dir:
@@ -164,14 +164,14 @@ python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
 ### 4.4 Create systemd service for backend
 
 ```bash
-sudo nano /etc/systemd/system/autoapply-backend.service
+sudo nano /etc/systemd/system/applyflowai-backend.service
 ```
 
 Paste:
 
 ```ini
 [Unit]
-Description=AutoApply FastAPI Backend
+Description=applyon FastAPI Backend
 After=network.target
 
 [Service]
@@ -188,9 +188,9 @@ WantedBy=multi-user.target
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable autoapply-backend
-sudo systemctl start autoapply-backend
-sudo systemctl status autoapply-backend   # should show "active (running)"
+sudo systemctl enable applyflowai-backend
+sudo systemctl start applyflowai-backend
+sudo systemctl status applyflowai-backend   # should show "active (running)"
 ```
 
 ---
@@ -207,7 +207,7 @@ cp .env.example .env
 Edit `.env` — set the backend URL to the EC2 public IP:
 
 ```env
-VITE_API_BASE_URL=http://<EC2_PUBLIC_IP>:8000
+VITE_API_BASE_URL=https://applyflowai.com/api
 ```
 
 > Note: use port 8000 directly since Nginx will proxy the frontend on port 80
@@ -221,7 +221,7 @@ npm run build          # outputs to frontend/dist/
 ### 5.2 Configure Nginx
 
 ```bash
-sudo nano /etc/nginx/sites-available/autoapply
+sudo nano /etc/nginx/sites-available/applyon
 ```
 
 Paste:
@@ -229,7 +229,7 @@ Paste:
 ```nginx
 server {
     listen 80;
-    server_name <EC2_PUBLIC_IP>;
+    server_name applyflowai.com www.applyflowai.com;
 
     # Serve React frontend
     root /home/ubuntu/app/frontend/dist;
@@ -253,7 +253,7 @@ server {
 Enable and reload:
 
 ```bash
-sudo ln -s /etc/nginx/sites-available/autoapply /etc/nginx/sites-enabled/
+sudo ln -s /etc/nginx/sites-available/applyon /etc/nginx/sites-enabled/
 sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t
 sudo systemctl reload nginx
@@ -269,7 +269,7 @@ curl http://localhost:8000/health
 # → {"status":"ok"}
 
 # Frontend (from your local machine)
-curl http://<EC2_PUBLIC_IP>/
+curl https://applyflowai.com/
 # → HTML of the React app
 ```
 
@@ -280,13 +280,15 @@ curl http://<EC2_PUBLIC_IP>/
 Edit `install.sh` and update `REPO_URL` to your actual GitHub repo URL.
 
 The Jobcook agent on user machines will connect to:
+
 ```
-ws://<EC2_PUBLIC_IP>:8000/agent/ws
+wss://applyflowai.com/agent/ws
 ```
 
 The frontend URL users visit:
+
 ```
-http://<EC2_PUBLIC_IP>
+https://applyflowai.com
 ```
 
 ---
@@ -299,7 +301,7 @@ cd /home/ubuntu/app
 git pull
 
 # Restart backend
-sudo systemctl restart autoapply-backend
+sudo systemctl restart applyflowai-backend
 
 # Rebuild frontend if changed
 cd frontend
@@ -314,21 +316,21 @@ npm run build
 
 ### backend/.env
 
-| Variable | Description | Example |
-|---|---|---|
-| `DATABASE_URL` | RDS connection string | `mysql+pymysql://admin:pass@rds-endpoint:3306/autoapply` |
-| `JWT_SECRET` | Long random string — keep secret | `openssl rand -hex 32` |
-| `JWT_EXPIRES_MIN` | Token expiry (minutes) | `10080` |
-| `RESUME_STORAGE_DIR` | Absolute path for resume uploads | `/home/ubuntu/app/storage/resumes` |
-| `CORS_ORIGINS` | Allowed origins (comma separated) | `http://<EC2_PUBLIC_IP>` |
-| `OPENAI_API_KEY` | Optional AI provider key | |
-| `GROQ_API_KEY` | Optional AI provider key | |
+| Variable             | Description                       | Example                                                |
+| -------------------- | --------------------------------- | ------------------------------------------------------ |
+| `DATABASE_URL`       | RDS connection string             | `mysql+pymysql://admin:pass@rds-endpoint:3306/applyon` |
+| `JWT_SECRET`         | Long random string — keep secret  | `openssl rand -hex 32`                                 |
+| `JWT_EXPIRES_MIN`    | Token expiry (minutes)            | `10080`                                                |
+| `RESUME_STORAGE_DIR` | Absolute path for resume uploads  | `/home/ubuntu/app/storage/resumes`                     |
+| `CORS_ORIGINS`       | Allowed origins (comma separated) | `https://applyflowai.com`                               |
+| `OPENAI_API_KEY`     | Optional AI provider key          |                                                        |
+| `GROQ_API_KEY`       | Optional AI provider key          |                                                        |
 
 ### frontend/.env (build time)
 
-| Variable | Description | Example |
-|---|---|---|
-| `VITE_API_BASE_URL` | Backend URL seen by browser | `http://<EC2_PUBLIC_IP>:8000` |
+| Variable            | Description                 | Example                       |
+| ------------------- | --------------------------- | ----------------------------- |
+| `VITE_API_BASE_URL` | Backend URL seen by browser | `https://applyflowai.com:8000` |
 
 ---
 

@@ -129,13 +129,13 @@ async def create_run(
 
 
 @router.post("/outreach", response_model=schemas.RunOut)
-def create_outreach_run(
+async def create_outreach_run(
     payload: schemas.RunCreate,
     current_user: models.User = Depends(get_current_user),
     session: Session = Depends(db.get_session),
 ):
     payload.run_type = "outreach"
-    return create_run(payload=payload, current_user=current_user, session=session)
+    return await create_run(payload=payload, current_user=current_user, session=session)
 
 
 @router.post("/{run_id}/stop")

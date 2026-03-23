@@ -1,4 +1,4 @@
-## ApplyOn
+## ApplyFlow AI
 
 Automation + dashboards for managing a job application workflow.
 

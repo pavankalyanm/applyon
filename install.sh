@@ -1,10 +1,11 @@
 #!/bin/sh
 # Jobcook install script
-# Usage: curl -sSL https://yourapp.com/install | sh
+# Usage: curl -sSL https://applyflowai.com/install | sh
 set -e
 
-REPO_URL="https://github.com/YOUR_USERNAME/YOUR_REPO.git"
+REPO_URL="https://github.com/pavankalyanm/applyon.git"
 INSTALL_DIR="$HOME/.jobcook/app"
+VENV_DIR="$HOME/.jobcook/venv"
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 YELLOW='\033[1;33m'
@@ -82,20 +83,27 @@ else
 fi
 echo "${GREEN}✓${RESET} Code ready"
 
-# ── Install package ───────────────────────────────────────────────────────────
+# ── Create venv + install package ────────────────────────────────────────────
 echo "Installing dependencies ..."
-python3 -m pip install -e "$INSTALL_DIR" --quiet
+python3 -m venv "$VENV_DIR" --clear
+"$VENV_DIR/bin/pip" install -e "$INSTALL_DIR" --quiet
 echo "${GREEN}✓${RESET} Jobcook installed"
 
-# ── Verify ────────────────────────────────────────────────────────────────────
-if ! command -v jobcook >/dev/null 2>&1; then
-    # Try common pip scripts dirs
-    SCRIPTS_DIR=$(python3 -c "import sysconfig; print(sysconfig.get_path('scripts'))")
-    if [ -f "$SCRIPTS_DIR/jobcook" ]; then
-        echo "${YELLOW}Note:${RESET} Add $SCRIPTS_DIR to your PATH to use 'jobcook' globally:"
-        echo "  echo 'export PATH=\"$SCRIPTS_DIR:\$PATH\"' >> ~/.zshrc && source ~/.zshrc"
+# ── Add venv bin to PATH via shell profile ────────────────────────────────────
+JOBCOOK_BIN="$VENV_DIR/bin"
+EXPORT_LINE="export PATH=\"$JOBCOOK_BIN:\$PATH\""
+
+for profile in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile"; do
+    if [ -f "$profile" ]; then
+        if ! grep -q "$JOBCOOK_BIN" "$profile" 2>/dev/null; then
+            echo "" >> "$profile"
+            echo "# Jobcook agent" >> "$profile"
+            echo "$EXPORT_LINE" >> "$profile"
+        fi
     fi
-fi
+done
+
+export PATH="$JOBCOOK_BIN:$PATH"
 
 # ── Done ──────────────────────────────────────────────────────────────────────
 echo ""
