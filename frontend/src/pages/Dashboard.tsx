@@ -650,7 +650,12 @@ export function Dashboard() {
             </Stack>
           </Box>
 
-          <Box sx={{ width: isMobile ? '100%' : 'auto' }}>
+          <Stack
+            direction={{ xs: 'column', md: 'row' }}
+            spacing={1}
+            alignItems={{ md: 'center' }}
+            sx={{ width: isMobile ? '100%' : 'auto' }}
+          >
             <Select
               size="small"
               displayEmpty
@@ -659,7 +664,6 @@ export function Dashboard() {
               sx={{
                 width: isMobile ? '100%' : 'auto',
                 minWidth: { sm: 200 },
-                mb: isMobile ? 1.5 : 0,
                 bgcolor: 'rgba(255,255,255,0.06)',
                 color: '#d1fae5',
                 fontSize: '0.85rem',
@@ -766,7 +770,7 @@ export function Dashboard() {
                 )}
               </Stack>
             )}
-          </Box>
+          </Stack>
         </Stack>
       </Box>
 
