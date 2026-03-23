@@ -63,9 +63,13 @@ const statusConfig: Record<string, { color: 'success' | 'warning' | 'error' | 'd
   pending:   { color: 'default', icon: <AccessTime sx={{ fontSize: 14 }} />,     label: 'pending' },
 }
 
+function asUtc(ts: string): string {
+  return ts.endsWith('Z') || ts.includes('+') ? ts : ts + 'Z'
+}
+
 function getDuration(run: Run): string {
-  const start = new Date(run.started_at).getTime()
-  const end = run.finished_at ? new Date(run.finished_at).getTime() : Date.now()
+  const start = new Date(asUtc(run.started_at)).getTime()
+  const end = run.finished_at ? new Date(asUtc(run.finished_at)).getTime() : Date.now()
   const s = Math.floor((end - start) / 1000)
   const m = Math.floor(s / 60)
   const h = Math.floor(m / 60)
@@ -243,7 +247,7 @@ function TerminalLogDialog({
           <Box component="span" sx={{ color: '#4ade80' }}>
             $
           </Box>{' '}
-          autoapply-bot
+          applyflowai-bot
           {run?.status === 'running' && (
             <Box
               component="span"
@@ -267,6 +271,7 @@ function TerminalLogDialog({
 
 export function Dashboard() {
   const [runs, setRuns] = useState<Run[]>([])
+  const [tick, setTick] = useState(0)
   const [runsPage, setRunsPage] = useState(1)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -410,6 +415,14 @@ export function Dashboard() {
   }, [])
 
   useEffect(() => { void refreshAll() }, [])
+
+  // Tick every second to keep active run timers live
+  useEffect(() => {
+    const hasActive = runs.some(r => r.status === 'running' || r.status === 'stopping')
+    if (!hasActive) return
+    const id = window.setInterval(() => setTick(t => t + 1), 1000)
+    return () => window.clearInterval(id)
+  }, [runs])
 
   useEffect(() => {
     if (!streamUrl) return
@@ -791,7 +804,7 @@ export function Dashboard() {
                         {/* Started */}
                         <TableCell>
                           <Typography sx={{ fontSize: '0.8rem', color: '#475569' }}>
-                            {new Date(run.started_at).toLocaleString(undefined, {
+                            {new Date(asUtc(run.started_at)).toLocaleString(undefined, {
                               month: 'short', day: 'numeric',
                               hour: '2-digit', minute: '2-digit',
                             })}

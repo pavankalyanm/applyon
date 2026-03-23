@@ -120,7 +120,7 @@ const installSteps = [
     step: '1',
     title: 'Install the agent',
     desc: 'One command downloads and installs Jobcook on your machine. Requires Python 3.10+ and Google Chrome.',
-    command: 'curl -sSL https://yourapp.com/install | sh',
+    command: 'curl -sSL https://applyflowai.com/install | sh',
   },
   {
     step: '2',
@@ -249,7 +249,7 @@ export function LandingPage() {
               <RocketLaunch sx={{ fontSize: 21 }} />
             </Box>
             <Typography sx={{ color: '#0f172a', fontWeight: 900, fontSize: '1.1rem', letterSpacing: '-0.03em' }}>
-              AutoApply
+              ApplyFlow AI
             </Typography>
           </Stack>
           <Stack direction="row" spacing={1.5}>
@@ -426,7 +426,7 @@ export function LandingPage() {
                     maxWidth: 640,
                   }}
                 >
-                  AutoApply is an AI-powered LinkedIn job application platform that automates search and apply workflows,
+                  ApplyFlow AI is an AI-powered LinkedIn job application platform that automates search and apply workflows,
                   shows real-time bot logs, and gives you a clean command center for every run, every job, and every outcome.
                 </Typography>
 
@@ -929,7 +929,7 @@ export function LandingPage() {
                     Watch the bot think, move, and work.
                   </Typography>
                   <Typography sx={{ color: 'rgba(226,232,240,0.82)', lineHeight: 1.85, maxWidth: 560 }}>
-                    AutoApply is not a black box. You can monitor runs in real time, expand logs, see current bot steps, and intervene the moment you need to.
+                    ApplyFlow AI is not a black box. You can monitor runs in real time, expand logs, see current bot steps, and intervene the moment you need to.
                   </Typography>
                   <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
                     <Chip icon={<Terminal />} label="Live logs" sx={{ bgcolor: 'rgba(255,255,255,0.08)', color: '#f8fafc' }} />
@@ -1230,7 +1230,7 @@ export function LandingPage() {
           <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems="center" spacing={1.5}>
             <Stack direction="row" alignItems="center" spacing={1}>
               <RocketLaunch sx={{ color: '#16a34a', fontSize: 18 }} />
-              <Typography sx={{ color: '#0f172a', fontWeight: 800 }}>AutoApply</Typography>
+              <Typography sx={{ color: '#0f172a', fontWeight: 800 }}>ApplyFlow AI</Typography>
             </Stack>
             <Typography sx={{ color: '#64748b', fontSize: '0.92rem', textAlign: { xs: 'center', sm: 'right' } }}>
               AI-powered LinkedIn job automation with real-time visibility and pipeline control.

@@ -21,10 +21,12 @@ def upgrade() -> None:
     if "runs" not in inspector.get_table_names():
         return
 
-    existing_columns = {column["name"] for column in inspector.get_columns("runs")}
+    existing_columns = {column["name"]
+                        for column in inspector.get_columns("runs")}
     run_columns = [
         ("pid", sa.Column("pid", sa.Integer(), nullable=True)),
-        ("stop_requested_at", sa.Column("stop_requested_at", sa.DateTime(), nullable=True)),
+        ("stop_requested_at", sa.Column(
+            "stop_requested_at", sa.DateTime(), nullable=True)),
         ("killed_at", sa.Column("killed_at", sa.DateTime(), nullable=True)),
         ("config_snapshot", sa.Column("config_snapshot", sa.Text(), nullable=True)),
         ("log_excerpt", sa.Column("log_excerpt", sa.Text(), nullable=True)),
@@ -32,7 +34,8 @@ def upgrade() -> None:
         ("worker_id", sa.Column("worker_id", sa.String(length=255), nullable=True)),
         ("worker_name", sa.Column("worker_name", sa.String(length=255), nullable=True)),
         ("worker_ip", sa.Column("worker_ip", sa.String(length=64), nullable=True)),
-        ("worker_last_seen_at", sa.Column("worker_last_seen_at", sa.DateTime(), nullable=True)),
+        ("worker_last_seen_at", sa.Column(
+            "worker_last_seen_at", sa.DateTime(), nullable=True)),
     ]
 
     for column_name, column in run_columns:
@@ -46,7 +49,8 @@ def downgrade() -> None:
     if "runs" not in inspector.get_table_names():
         return
 
-    existing_columns = {column["name"] for column in inspector.get_columns("runs")}
+    existing_columns = {column["name"]
+                        for column in inspector.get_columns("runs")}
     for column_name in [
         "worker_last_seen_at",
         "worker_ip",

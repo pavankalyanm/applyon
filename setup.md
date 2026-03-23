@@ -6,12 +6,12 @@ Stack: FastAPI backend · React/Vite frontend · MySQL database · Jobcook local
 
 ## Prerequisites
 
-| Requirement | Version |
-|---|---|
-| Python | 3.10+ |
-| Node.js | LTS (18+) |
-| MySQL | 8.0+ running locally |
-| Google Chrome | Latest |
+| Requirement   | Version              |
+| ------------- | -------------------- |
+| Python        | 3.10+                |
+| Node.js       | LTS (18+)            |
+| MySQL         | 8.0+ running locally |
+| Google Chrome | Latest               |
 
 ---
 
@@ -118,31 +118,31 @@ jobcook install-service
 
 ### backend/.env
 
-| Variable | Description | Default |
-|---|---|---|
-| `DATABASE_URL` | MySQL connection string | `mysql+pymysql://root:@localhost:3306/easy-apply` |
-| `JWT_SECRET` | Secret for signing JWTs — change this | `change-me-in-production` |
-| `JWT_EXPIRES_MIN` | Token expiry in minutes | `10080` (7 days) |
-| `RESUME_STORAGE_DIR` | Where uploaded resumes are stored | `./storage/resumes` |
-| `OPENAI_API_KEY` | Optional — injected into bot at run time | |
-| `GROQ_API_KEY` | Optional — injected into bot at run time | |
-| `DEEPSEEK_API_KEY` | Optional — injected into bot at run time | |
-| `GEMINI_API_KEY` | Optional — injected into bot at run time | |
+| Variable             | Description                              | Default                                           |
+| -------------------- | ---------------------------------------- | ------------------------------------------------- |
+| `DATABASE_URL`       | MySQL connection string                  | `mysql+pymysql://root:@localhost:3306/easy-apply` |
+| `JWT_SECRET`         | Secret for signing JWTs — change this    | `change-me-in-production`                         |
+| `JWT_EXPIRES_MIN`    | Token expiry in minutes                  | `10080` (7 days)                                  |
+| `RESUME_STORAGE_DIR` | Where uploaded resumes are stored        | `./storage/resumes`                               |
+| `OPENAI_API_KEY`     | Optional — injected into bot at run time |                                                   |
+| `GROQ_API_KEY`       | Optional — injected into bot at run time |                                                   |
+| `DEEPSEEK_API_KEY`   | Optional — injected into bot at run time |                                                   |
+| `GEMINI_API_KEY`     | Optional — injected into bot at run time |                                                   |
 
 ### frontend/.env
 
-| Variable | Description | Default |
-|---|---|---|
+| Variable            | Description | Default                 |
+| ------------------- | ----------- | ----------------------- |
 | `VITE_API_BASE_URL` | Backend URL | `http://localhost:8000` |
 
 ---
 
 ## 6. Common Issues
 
-| Problem | Fix |
-|---|---|
-| `pip: bad interpreter` | Use `python3 -m pip` or activate the right venv |
-| DB connection error | Check `DATABASE_URL`, ensure MySQL is running and DB exists |
-| CORS errors in browser | Check `VITE_API_BASE_URL` matches the running backend URL |
-| Chrome not found | Install Chrome; run `jobcook status` to verify |
-| `export_section() takes 2 args` | Fixed in `bot/config/_runtime.py` — pull latest |
+| Problem                         | Fix                                                         |
+| ------------------------------- | ----------------------------------------------------------- |
+| `pip: bad interpreter`          | Use `python3 -m pip` or activate the right venv             |
+| DB connection error             | Check `DATABASE_URL`, ensure MySQL is running and DB exists |
+| CORS errors in browser          | Check `VITE_API_BASE_URL` matches the running backend URL   |
+| Chrome not found                | Install Chrome; run `jobcook status` to verify              |
+| `export_section() takes 2 args` | Fixed in `bot/config/_runtime.py` — pull latest             |
