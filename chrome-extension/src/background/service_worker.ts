@@ -306,7 +306,7 @@ async function launchBotTab(config: Record<string, unknown>) {
 
   // Store context BEFORE creating the tab so the content script can read it immediately
   await chrome.storage.session.set({
-    applyon_bot_context: {
+    applyflowai_bot_context: {
       runId,
       config,
       token: auth.token,
