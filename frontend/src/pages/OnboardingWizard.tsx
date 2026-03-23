@@ -139,7 +139,7 @@ export function OnboardingWizard() {
           <Stack direction="row" alignItems="center" spacing={1.5} sx={{ py: 2 }}>
             <RocketLaunch sx={{ color: '#16a34a', fontSize: 24 }} />
             <Typography sx={{ fontWeight: 800, color: '#14532d', fontSize: '1rem' }}>
-              AutoApply
+              ApplyFlow AI
             </Typography>
             <Box sx={{ flexGrow: 1 }} />
             <Typography sx={{ color: '#64748b', fontSize: '0.85rem' }}>

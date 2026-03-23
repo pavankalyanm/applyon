@@ -55,7 +55,7 @@ export function AppLayout() {
                 letterSpacing: '-0.01em',
               }}
             >
-              AutoApply
+              ApplyFlow AI
             </Typography>
           </Stack>
         </Box>

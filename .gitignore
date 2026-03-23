@@ -30,6 +30,7 @@ logs/
 # ── Node / frontend ───────────────────────────────────────────────────────────
 **/node_modules/
 frontend/dist/
+chrome-extension/dist/
 
 # ── Bot data ──────────────────────────────────────────────────────────────────
 all excels/

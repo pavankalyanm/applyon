@@ -112,7 +112,7 @@ mysql -h <RDS_ENDPOINT> -u admin -p
 ```
 
 ```sql
-CREATE DATABASE `applyon` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE `applyflowai` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 EXIT;
 ```
 
@@ -139,7 +139,7 @@ nano backend/.env
 Fill in the values (see reference below):
 
 ```env
-DATABASE_URL=mysql+pymysql://admin:YOUR_RDS_PASSWORD@YOUR_RDS_ENDPOINT:3306/applyon
+DATABASE_URL=mysql+pymysql://admin:YOUR_RDS_PASSWORD@YOUR_RDS_ENDPOINT:3306/applyflowai
 JWT_SECRET=replace-with-long-random-string
 JWT_EXPIRES_MIN=10080
 RESUME_STORAGE_DIR=/home/ubuntu/app/storage/resumes
@@ -171,7 +171,7 @@ Paste:
 
 ```ini
 [Unit]
-Description=applyon FastAPI Backend
+Description=applyflowai FastAPI Backend
 After=network.target
 
 [Service]
@@ -221,7 +221,7 @@ npm run build          # outputs to frontend/dist/
 ### 5.2 Configure Nginx
 
 ```bash
-sudo nano /etc/nginx/sites-available/applyon
+sudo nano /etc/nginx/sites-available/applyflowai
 ```
 
 Paste:
@@ -253,7 +253,7 @@ server {
 Enable and reload:
 
 ```bash
-sudo ln -s /etc/nginx/sites-available/applyon /etc/nginx/sites-enabled/
+sudo ln -s /etc/nginx/sites-available/applyflowai /etc/nginx/sites-enabled/
 sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t
 sudo systemctl reload nginx
@@ -318,7 +318,7 @@ npm run build
 
 | Variable             | Description                       | Example                                                |
 | -------------------- | --------------------------------- | ------------------------------------------------------ |
-| `DATABASE_URL`       | RDS connection string             | `mysql+pymysql://admin:pass@rds-endpoint:3306/applyon` |
+| `DATABASE_URL`       | RDS connection string             | `mysql+pymysql://admin:pass@rds-endpoint:3306/applyflowai` |
 | `JWT_SECRET`         | Long random string — keep secret  | `openssl rand -hex 32`                                 |
 | `JWT_EXPIRES_MIN`    | Token expiry (minutes)            | `10080`                                                |
 | `RESUME_STORAGE_DIR` | Absolute path for resume uploads  | `/home/ubuntu/app/storage/resumes`                     |

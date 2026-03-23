@@ -104,7 +104,7 @@ export function AuthPage() {
             </IconButton>
             <RocketLaunch sx={{ color: '#16a34a', fontSize: 26 }} />
             <Typography sx={{ fontWeight: 800, color: '#14532d', fontSize: '1.1rem' }}>
-              AutoApply
+              ApplyFlow AI
             </Typography>
           </Stack>
 
