@@ -261,6 +261,29 @@ export function LandingPage() {
           'radial-gradient(circle at top left, rgba(22,163,74,0.16), transparent 26%), radial-gradient(circle at 85% 12%, rgba(34,211,238,0.18), transparent 22%), linear-gradient(180deg, #f4fbf8 0%, #f9fcff 28%, #f6faf7 100%)',
       }}
     >
+      {/* ── Mobile banner ── */}
+      <Box
+        sx={{
+          display: { xs: 'flex', md: 'none' },
+          alignItems: 'flex-start',
+          gap: 1.5,
+          px: 2,
+          py: 1.5,
+          bgcolor: '#0f172a',
+          borderBottom: '1px solid rgba(34,197,94,0.18)',
+        }}
+      >
+        <Box sx={{ fontSize: '1.1rem', mt: 0.1, flexShrink: 0 }}>💻</Box>
+        <Box>
+          <Typography sx={{ color: '#f0fdf4', fontWeight: 700, fontSize: '0.82rem', lineHeight: 1.4 }}>
+            Best experienced on desktop
+          </Typography>
+          <Typography sx={{ color: '#86efac', fontSize: '0.75rem', lineHeight: 1.5, mt: 0.2 }}>
+            The agent runs on your laptop — but you can monitor and control it from your phone once it's set up.
+          </Typography>
+        </Box>
+      </Box>
+
       <AppBar
         position="sticky"
         elevation={0}
@@ -420,7 +443,7 @@ export function LandingPage() {
               <Stack spacing={4} className="fade-in">
                 <Chip
                   icon={<CheckCircleOutline sx={{ fontSize: '1rem !important' }} />}
-                  label="AI-powered LinkedIn automation with full visibility"
+                  label="AI that applies to jobs for you."
                   sx={{
                     alignSelf: 'flex-start',
                     px: 1,
