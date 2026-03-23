@@ -674,74 +674,98 @@ export function Dashboard() {
               ))}
             </Select>
 
-            <Stack
-              direction="row"
-              spacing={1}
-              flexWrap="wrap"
-              sx={{ gap: 1, mt: isMobile ? 0 : 0 }}
-            >
-              <Button
-                variant="contained"
-                disabled={loading}
-                onClick={startRun}
-                startIcon={<PlayArrow sx={{ fontSize: 16 }} />}
-                sx={{
-                  flex: isMobile ? 1 : 'none',
-                  bgcolor: '#fff',
-                  color: '#15803d',
-                  fontWeight: 700,
-                  '&:hover': { bgcolor: '#f0fdf4' },
-                  '&:disabled': { bgcolor: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.4)' },
-                  background: '#fff',
-                }}
-              >
-                {loading ? 'Starting…' : 'Start Bot'}
-              </Button>
-
-              <Button
-                variant="outlined"
-                onClick={() => setOutreachDialogOpen(true)}
-                sx={{
-                  flex: isMobile ? 1 : 'none',
-                  borderColor: 'rgba(255,255,255,0.2)',
-                  color: '#d1fae5',
-                  '&:hover': { borderColor: '#fff', bgcolor: 'rgba(255,255,255,0.06)' },
-                }}
-              >
-                Outreach
-              </Button>
-
-              {activeRun && (
-                <>
+            {isMobile ? (
+              /* Mobile: 2-col grid rows so buttons never squish */
+              <Stack spacing={1}>
+                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
                   <Button
-                    variant="outlined"
-                    onClick={() => stopRun(activeRun.id)}
-                    startIcon={<Stop sx={{ fontSize: 16 }} />}
+                    variant="contained"
+                    disabled={loading}
+                    onClick={startRun}
+                    startIcon={<PlayArrow sx={{ fontSize: 15 }} />}
                     sx={{
-                      flex: isMobile ? 1 : 'none',
-                      borderColor: 'rgba(255,200,0,0.4)',
-                      color: '#fde68a',
-                      '&:hover': { borderColor: '#fde68a', bgcolor: 'rgba(253,230,138,0.08)' },
+                      bgcolor: '#fff', color: '#15803d', fontWeight: 700, fontSize: '0.85rem',
+                      '&:hover': { bgcolor: '#f0fdf4' },
+                      '&:disabled': { bgcolor: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.4)' },
                     }}
                   >
-                    Stop
+                    {loading ? 'Starting…' : 'Start Bot'}
                   </Button>
                   <Button
                     variant="outlined"
-                    onClick={() => killRun(activeRun.id)}
-                    startIcon={<PowerSettingsNew sx={{ fontSize: 16 }} />}
-                    sx={{
-                      flex: isMobile ? 1 : 'none',
-                      borderColor: 'rgba(239,68,68,0.4)',
-                      color: '#fca5a5',
-                      '&:hover': { borderColor: '#ef4444', bgcolor: 'rgba(239,68,68,0.08)' },
-                    }}
+                    onClick={() => setOutreachDialogOpen(true)}
+                    sx={{ borderColor: 'rgba(255,255,255,0.2)', color: '#d1fae5', fontSize: '0.85rem', '&:hover': { borderColor: '#fff', bgcolor: 'rgba(255,255,255,0.06)' } }}
                   >
-                    Kill
+                    Outreach
                   </Button>
-                </>
-              )}
-            </Stack>
+                </Box>
+                {activeRun && (
+                  <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
+                    <Button
+                      variant="outlined"
+                      onClick={() => stopRun(activeRun.id)}
+                      startIcon={<Stop sx={{ fontSize: 15 }} />}
+                      sx={{ borderColor: 'rgba(255,200,0,0.4)', color: '#fde68a', fontSize: '0.85rem', '&:hover': { borderColor: '#fde68a' } }}
+                    >
+                      Stop
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      onClick={() => killRun(activeRun.id)}
+                      startIcon={<PowerSettingsNew sx={{ fontSize: 15 }} />}
+                      sx={{ borderColor: 'rgba(239,68,68,0.4)', color: '#fca5a5', fontSize: '0.85rem', '&:hover': { borderColor: '#ef4444' } }}
+                    >
+                      Force Stop
+                    </Button>
+                  </Box>
+                )}
+              </Stack>
+            ) : (
+              /* Desktop: inline row */
+              <Stack direction="row" spacing={1}>
+                <Button
+                  variant="contained"
+                  disabled={loading}
+                  onClick={startRun}
+                  startIcon={<PlayArrow sx={{ fontSize: 16 }} />}
+                  sx={{
+                    bgcolor: '#fff', color: '#15803d', fontWeight: 700,
+                    '&:hover': { bgcolor: '#f0fdf4' },
+                    '&:disabled': { bgcolor: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.4)' },
+                    background: '#fff',
+                  }}
+                >
+                  {loading ? 'Starting…' : 'Start Bot'}
+                </Button>
+                <Button
+                  variant="outlined"
+                  onClick={() => setOutreachDialogOpen(true)}
+                  sx={{ borderColor: 'rgba(255,255,255,0.2)', color: '#d1fae5', '&:hover': { borderColor: '#fff', bgcolor: 'rgba(255,255,255,0.06)' } }}
+                >
+                  Start Outreach
+                </Button>
+                {activeRun && (
+                  <>
+                    <Button
+                      variant="outlined"
+                      onClick={() => stopRun(activeRun.id)}
+                      startIcon={<Stop sx={{ fontSize: 16 }} />}
+                      sx={{ borderColor: 'rgba(255,200,0,0.4)', color: '#fde68a', '&:hover': { borderColor: '#fde68a', bgcolor: 'rgba(253,230,138,0.08)' } }}
+                    >
+                      Stop
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      onClick={() => killRun(activeRun.id)}
+                      startIcon={<PowerSettingsNew sx={{ fontSize: 16 }} />}
+                      sx={{ borderColor: 'rgba(239,68,68,0.4)', color: '#fca5a5', '&:hover': { borderColor: '#ef4444', bgcolor: 'rgba(239,68,68,0.08)' } }}
+                    >
+                      Force Stop
+                    </Button>
+                  </>
+                )}
+              </Stack>
+            )}
           </Box>
         </Stack>
       </Box>

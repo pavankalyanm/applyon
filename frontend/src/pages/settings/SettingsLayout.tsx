@@ -135,39 +135,53 @@ export function SettingsLayout() {
         </Stack>
 
         {/* ── Horizontal tab bar ── */}
-        <Tabs
-          value={activeSection}
-          onChange={(_, val) => navigate(`/settings/${val}`)}
-          variant="scrollable"
-          scrollButtons="auto"
-          TabIndicatorProps={{
-            style: {
-              backgroundColor: '#16a34a',
-              height: 2,
-            },
-          }}
-          sx={{
-            borderBottom: '2px solid #e2e8f0',
-            minHeight: { xs: 38, md: 42 },
-            '& .MuiTab-root': {
+        <Box sx={{ position: 'relative' }}>
+          <Tabs
+            value={activeSection}
+            onChange={(_, val) => navigate(`/settings/${val}`)}
+            variant="scrollable"
+            scrollButtons="auto"
+            allowScrollButtonsMobile
+            sx={{
+              '& .MuiTabs-indicator': { backgroundColor: '#16a34a', height: 2 },
+              borderBottom: '2px solid #e2e8f0',
               minHeight: { xs: 38, md: 42 },
-              fontSize: { xs: '0.76rem', md: '0.82rem' },
-              fontWeight: 500,
-              textTransform: 'none',
-              px: { xs: 1.5, md: 2.5 },
-              py: 0,
-              color: '#64748b',
-              '&.Mui-selected': {
-                color: '#16a34a',
-                fontWeight: 700,
+              '& .MuiTab-root': {
+                minHeight: { xs: 38, md: 42 },
+                fontSize: { xs: '0.76rem', md: '0.82rem' },
+                fontWeight: 500,
+                textTransform: 'none',
+                px: { xs: 1.5, md: 2.5 },
+                py: 0,
+                color: '#64748b',
+                '&.Mui-selected': { color: '#16a34a', fontWeight: 700 },
               },
-            },
-          }}
-        >
-          {sections.map((s) => (
-            <Tab key={s.key} label={s.label} value={s.key} disableRipple />
-          ))}
-        </Tabs>
+              '& .MuiTabs-scrollButtons': {
+                color: '#64748b',
+                '&.Mui-disabled': { opacity: 0 },
+              },
+            }}
+          >
+            {sections.map((s) => (
+              <Tab key={s.key} label={s.label} value={s.key} disableRipple />
+            ))}
+          </Tabs>
+          {/* Fade hint on right edge — only visible on mobile when not at end */}
+          {isMobile && (
+            <Box
+              sx={{
+                display: { xs: 'block', md: 'none' },
+                position: 'absolute',
+                top: 0,
+                right: 0,
+                bottom: 2,
+                width: 48,
+                background: 'linear-gradient(to right, transparent, rgba(247,250,248,0.95))',
+                pointerEvents: 'none',
+              }}
+            />
+          )}
+        </Box>
       </Box>
 
       {/* ── Section content ── */}
