@@ -9,6 +9,7 @@ import { AppLayout } from './pages/AppLayout'
 import { SettingsLayout } from './pages/settings/SettingsLayout'
 import { SettingsSectionPage } from './pages/settings/SettingsSectionPage'
 import { LearnedAnswersPage } from './pages/settings/LearnedAnswersPage'
+import { SetupGuidePage } from './pages/SetupGuidePage'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = localStorage.getItem('access_token')
@@ -20,6 +21,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<LandingPage />} />
+      <Route path="/setup-guide" element={<SetupGuidePage />} />
       <Route path="/auth" element={<AuthPage />} />
       <Route
         path="/onboarding"

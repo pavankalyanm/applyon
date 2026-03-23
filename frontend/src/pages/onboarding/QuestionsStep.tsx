@@ -28,9 +28,6 @@ export function QuestionsStep({ value, onChange }: Props) {
       <Typography variant="h6" sx={{ color: '#0f172a' }}>
         Application Questions
       </Typography>
-      <Typography color="text.secondary" fontSize="0.95rem">
-        These fields map directly to <code>bot/config/questions.py</code>.
-      </Typography>
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
         <TextField
           label="Years of experience (generic answer)"

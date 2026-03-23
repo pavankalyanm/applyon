@@ -18,9 +18,6 @@ export function SettingsStep({ value, onChange, aiEnabled = true }: Props) {
       <Typography variant="h6" sx={{ color: '#0f172a' }}>
         Bot & Global Settings
       </Typography>
-      <Typography color="text.secondary" fontSize="0.95rem">
-        These fields map directly to <code>bot/config/settings.py</code>.
-      </Typography>
       <FormGroup>
         <FormControlLabel
           control={

@@ -4,11 +4,9 @@ import {
   Button,
   Chip,
   Container,
-  IconButton,
   Paper,
   Stack,
   Toolbar,
-  Tooltip,
   Typography,
   useMediaQuery,
   useTheme,
@@ -17,9 +15,7 @@ import {
   ArrowForward,
   AutoAwesome,
   Bolt,
-  Check,
   CheckCircleOutline,
-  ContentCopy,
   DashboardCustomize,
   Lan,
   ManageSearch,
@@ -82,82 +78,12 @@ const commandPanels = [
   },
 ]
 
-function CopyableCommand({ command }: { command: string }) {
-  const [copied, setCopied] = useState(false)
-  function copy() {
-    navigator.clipboard.writeText(command)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-  return (
-    <Box
-      sx={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        bgcolor: '#0f172a',
-        borderRadius: '6px',
-        px: 1.5,
-        py: 1,
-        gap: 1,
-      }}
-    >
-      <Typography
-        component="code"
-        sx={{ fontFamily: 'monospace', fontSize: { xs: '0.72rem', sm: '0.82rem' }, color: '#86efac', flexGrow: 1, wordBreak: 'break-all', lineHeight: 1.5 }}
-      >
-        {command}
-      </Typography>
-      <Tooltip title={copied ? 'Copied!' : 'Copy'} placement="top">
-        <IconButton size="small" onClick={copy} sx={{ color: copied ? '#86efac' : '#64748b', p: 0.5 }}>
-          {copied ? <Check sx={{ fontSize: 15 }} /> : <ContentCopy sx={{ fontSize: 15 }} />}
-        </IconButton>
-      </Tooltip>
-    </Box>
-  )
-}
-
-const installStepsByOS = {
-  mac: [
-    {
-      step: '1',
-      title: 'Install the agent',
-      desc: 'One command downloads and installs Jobcook on your machine. Python 3.10+ is installed automatically if needed.',
-      command: 'curl -sSL https://applyflowai.com/install | sh',
-    },
-  ],
-  windows: [
-    {
-      step: '1',
-      title: 'Install the agent',
-      desc: 'Download and run the installer. Python 3.12 and git are installed automatically via winget if needed.',
-      command: 'curl -o "%TEMP%\\jobcook_install.bat" https://applyflowai.com/install.bat && "%TEMP%\\jobcook_install.bat"',
-    },
-  ],
-}
-
-const installStepsShared = [
-  {
-    step: '2',
-    title: 'Connect to your account',
-    desc: 'Log in with your account credentials. Your token is saved securely in ~/.jobcook/config.json.',
-    command: 'jobcook login',
-  },
-  {
-    step: '3',
-    title: 'Run in the background',
-    desc: 'Installs as a system service. Starts automatically on login — no terminal needed again.',
-    command: 'jobcook install-service',
-  },
-]
-
 export function LandingPage() {
   const navigate = useNavigate()
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
   const [scrollY, setScrollY] = useState(0)
   const [logIndex, setLogIndex] = useState(0)
-  const [osTab, setOsTab] = useState<'mac' | 'windows'>('mac')
   const [sectionProgress, setSectionProgress] = useState({
     productStory: 0,
     howItWorks: 0,
@@ -225,26 +151,6 @@ export function LandingPage() {
     return liveLogs[index]
   })
 
-  const termLines = useMemo(() => [
-    { type: 'cmd', text: 'curl -sSL https://applyflowai.com/install | sh' },
-    { type: 'out', text: '✓ Python 3.12' },
-    { type: 'out', text: '✓ Jobcook installed successfully!' },
-    { type: 'cmd', text: 'jobcook login' },
-    { type: 'prompt', text: 'Backend URL: https://applyflowai.com' },
-    { type: 'prompt', text: 'Email: you@email.com  Password: ••••••••' },
-    { type: 'out', text: '✓ Logged in · token saved to ~/.jobcook/config.json' },
-    { type: 'cmd', text: 'jobcook install-service' },
-    { type: 'out', text: '✓ Service installed · agent starts automatically on login' },
-    { type: 'status', text: '● Agent connected → applyflowai.com' },
-  ], [])
-
-  const [termStep, setTermStep] = useState(0)
-  useEffect(() => {
-    const id = window.setInterval(() => {
-      setTermStep((s) => (s + 1 >= termLines.length ? 0 : s + 1))
-    }, 1400)
-    return () => window.clearInterval(id)
-  }, [termLines])
   const heroProgress = isMobile ? 0 : Math.min(scrollY / 900, 1.1)
   const heroTextShift = isMobile ? 0 : Math.min(scrollY * 0.18, 120)
   const heroPanelShift = isMobile ? 0 : Math.min(scrollY * 0.14, 110)
@@ -315,6 +221,13 @@ export function LandingPage() {
             </Typography>
           </Stack>
           <Stack direction="row" spacing={1}>
+            <Button
+              variant="text"
+              onClick={() => navigate('/setup-guide')}
+              sx={{ color: '#475569', fontWeight: 700, display: { xs: 'none', sm: 'inline-flex' } }}
+            >
+              Setup Guide
+            </Button>
             <Button
               variant="text"
               onClick={() => navigate('/auth')}
@@ -518,7 +431,7 @@ export function LandingPage() {
                     variant="outlined"
                     size="large"
                     fullWidth={isMobile}
-                    onClick={() => document.getElementById('product-story')?.scrollIntoView({ behavior: 'smooth' })}
+                    onClick={() => navigate('/setup-guide')}
                     sx={{
                       px: { xs: 3, sm: 4 },
                       py: 1.5,
@@ -529,7 +442,7 @@ export function LandingPage() {
                       backdropFilter: 'blur(12px)',
                     }}
                   >
-                    See How It Works
+                    See Setup Guide
                   </Button>
                 </Stack>
 
@@ -1035,11 +948,12 @@ export function LandingPage() {
                       { icon: <ViewKanban sx={{ fontSize: 20 }} />, text: 'Move jobs between Applied, Assessment, Interview, and Rejected' },
                       { icon: <DashboardCustomize sx={{ fontSize: 20 }} />, text: 'Use both board and table views depending on how you think' },
                     ].map((item) => (
-                      <Stack key={item.text} direction="row" spacing={1.4} alignItems="center">
+                      <Stack key={item.text} direction="row" spacing={1.4} alignItems="flex-start">
                         <Box
                           sx={{
                             width: 38,
                             height: 38,
+                            flexShrink: 0,
                             borderRadius: '5px',
                             display: 'grid',
                             placeItems: 'center',
@@ -1049,252 +963,13 @@ export function LandingPage() {
                         >
                           {item.icon}
                         </Box>
-                        <Typography sx={{ color: '#334155', fontWeight: 600 }}>{item.text}</Typography>
+                        <Typography sx={{ color: '#334155', fontWeight: 600, lineHeight: 1.55, pt: 0.5 }}>{item.text}</Typography>
                       </Stack>
                     ))}
                   </Stack>
                 </Stack>
               </Paper>
             </Box>
-          </Stack>
-        </Container>
-      </Box>
-
-      {/* ── Jobcook Install Section ──────────────────────────────────────── */}
-      <Box sx={{ py: { xs: 6, md: 12 }, position: 'relative', overflow: 'hidden' }}>
-        <Container maxWidth="xl" sx={{ px: { xs: 2, sm: 3, md: 4 } }}>
-          <Stack spacing={6}>
-            <Stack spacing={1.5} alignItems="center" textAlign="center">
-              <Chip
-                icon={<Terminal sx={{ fontSize: '1rem !important' }} />}
-                label="Local Agent"
-                sx={{
-                  alignSelf: 'center',
-                  px: 1,
-                  height: 36,
-                  borderRadius: '5px',
-                  bgcolor: 'rgba(15,23,42,0.06)',
-                  border: '1px solid rgba(15,23,42,0.1)',
-                  color: '#0f172a',
-                  fontWeight: 700,
-                }}
-              />
-              <Typography
-                variant="h2"
-                sx={{
-                  color: '#0f172a',
-                  fontSize: { xs: '2rem', md: '3rem' },
-                  lineHeight: 1.02,
-                  letterSpacing: '-0.05em',
-                  fontWeight: 900,
-                  maxWidth: 640,
-                }}
-              >
-                Get running in{' '}
-                <Box
-                  component="span"
-                  sx={{
-                    background: 'linear-gradient(135deg, #14532d 0%, #16a34a 45%, #06b6d4 100%)',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                  }}
-                >
-                  3 commands.
-                </Box>
-              </Typography>
-              <Typography sx={{ color: '#64748b', fontSize: '1.05rem', lineHeight: 1.8, maxWidth: 580 }}>
-                Jobcook runs locally on your machine and connects to your web account. Start, stop, and monitor your bot
-                entirely from the dashboard — no terminal needed after setup.
-              </Typography>
-            </Stack>
-
-            {/* OS tab toggle */}
-            <Stack direction="row" justifyContent="center">
-              <Box
-                sx={{
-                  display: 'inline-flex',
-                  bgcolor: 'rgba(15,23,42,0.05)',
-                  borderRadius: '8px',
-                  p: 0.5,
-                  gap: 0.5,
-                }}
-              >
-                {(['mac', 'windows'] as const).map((os) => (
-                  <Button
-                    key={os}
-                    size="small"
-                    onClick={() => setOsTab(os)}
-                    sx={{
-                      borderRadius: '6px',
-                      fontWeight: 700,
-                      fontSize: '0.82rem',
-                      px: 2,
-                      py: 0.6,
-                      textTransform: 'none',
-                      ...(osTab === os
-                        ? { bgcolor: '#fff', color: '#0f172a', boxShadow: '0 1px 4px rgba(0,0,0,0.1)' }
-                        : { bgcolor: 'transparent', color: '#64748b' }),
-                    }}
-                  >
-                    {os === 'mac' ? '🍎 macOS / Linux' : '🪟 Windows'}
-                  </Button>
-                ))}
-              </Box>
-            </Stack>
-
-            <Box
-              sx={{
-                display: 'grid',
-                gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' },
-                gap: 2.5,
-              }}
-            >
-              {[...installStepsByOS[osTab], ...installStepsShared].map((item) => (
-                <Paper
-                  key={item.step}
-                  elevation={0}
-                  sx={{
-                    p: 3,
-                    borderRadius: '5px',
-                    bgcolor: 'rgba(255,255,255,0.82)',
-                    backdropFilter: 'blur(14px)',
-                    border: '1px solid rgba(148,163,184,0.18)',
-                    boxShadow: '0 8px 32px rgba(15,23,42,0.05)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 2,
-                  }}
-                >
-                  <Stack direction="row" alignItems="center" spacing={1.5}>
-                    <Box
-                      sx={{
-                        width: 40,
-                        height: 40,
-                        borderRadius: '50%',
-                        display: 'grid',
-                        placeItems: 'center',
-                        color: '#fff',
-                        fontWeight: 900,
-                        fontSize: '1rem',
-                        background: 'linear-gradient(135deg, #14532d, #16a34a)',
-                        boxShadow: '0 8px 20px rgba(22,163,74,0.22)',
-                        flexShrink: 0,
-                      }}
-                    >
-                      {item.step}
-                    </Box>
-                    <Typography sx={{ color: '#0f172a', fontWeight: 800, fontSize: '1.05rem' }}>
-                      {item.title}
-                    </Typography>
-                  </Stack>
-                  <Typography sx={{ color: '#64748b', lineHeight: 1.75, fontSize: '0.93rem' }}>
-                    {item.desc}
-                  </Typography>
-                  <CopyableCommand command={item.command} />
-                </Paper>
-              ))}
-            </Box>
-
-            {/* ── Terminal animation ── */}
-            <Paper
-              elevation={0}
-              sx={{
-                borderRadius: '5px',
-                overflow: 'hidden',
-                border: '1px solid rgba(148,163,184,0.18)',
-                boxShadow: '0 16px 48px rgba(15,23,42,0.12)',
-              }}
-            >
-              {/* title bar */}
-              <Box sx={{ px: 2, py: 1.2, bgcolor: '#1e293b', display: 'flex', alignItems: 'center', gap: 1 }}>
-                {['#ef4444','#f59e0b','#22c55e'].map((c) => (
-                  <Box key={c} sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: c }} />
-                ))}
-                <Typography sx={{ color: '#64748b', fontSize: '0.8rem', ml: 1, fontFamily: 'monospace' }}>
-                  terminal
-                </Typography>
-              </Box>
-              {/* body */}
-              <Box
-                sx={{
-                  bgcolor: '#0f172a',
-                  p: { xs: 1.5, md: 3 },
-                  minHeight: 200,
-                  fontFamily: 'monospace',
-                  fontSize: { xs: '0.72rem', md: '0.875rem' },
-                  lineHeight: 1.9,
-                  overflowX: 'auto',
-                  '& span': { whiteSpace: 'pre-wrap', wordBreak: 'break-all' },
-                }}
-              >
-                {termLines.slice(0, termStep + 1).map((line, i) => (
-                  <Box key={i} sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
-                    {line.type === 'cmd' && (
-                      <>
-                        <Box component="span" sx={{ color: '#4ade80', userSelect: 'none' }}>$</Box>
-                        <Box component="span" sx={{ color: '#e2e8f0' }}>{line.text}</Box>
-                      </>
-                    )}
-                    {line.type === 'out' && (
-                      <Box component="span" sx={{ color: '#86efac', pl: 2 }}>{line.text}</Box>
-                    )}
-                    {line.type === 'prompt' && (
-                      <Box component="span" sx={{ color: '#94a3b8', pl: 2 }}>{line.text}</Box>
-                    )}
-                    {line.type === 'status' && (
-                      <Box component="span" sx={{ color: '#4ade80', fontWeight: 700, pl: 2, animation: 'pulse 2s infinite', '@keyframes pulse': { '0%,100%': { opacity: 1 }, '50%': { opacity: 0.6 } } }}>
-                        {line.text}
-                      </Box>
-                    )}
-                  </Box>
-                ))}
-                {/* blinking cursor */}
-                <Box component="span" sx={{ display: 'inline-block', width: 8, height: '1em', bgcolor: '#4ade80', ml: termStep === termLines.length - 1 ? 2 : 0, animation: 'blink 1s step-end infinite', '@keyframes blink': { '0%,100%': { opacity: 1 }, '50%': { opacity: 0 } } }} />
-              </Box>
-            </Paper>
-
-            <Paper
-              elevation={0}
-              sx={{
-                p: { xs: 2.5, md: 3 },
-                borderRadius: '5px',
-                bgcolor: 'rgba(15,23,42,0.03)',
-                border: '1px solid rgba(15,23,42,0.08)',
-                display: 'flex',
-                flexDirection: { xs: 'column', sm: 'row' },
-                alignItems: { sm: 'center' },
-                gap: 2,
-              }}
-            >
-              <Terminal sx={{ color: '#64748b', fontSize: 22, flexShrink: 0 }} />
-              <Box sx={{ flexGrow: 1 }}>
-                <Typography sx={{ color: '#0f172a', fontWeight: 700, mb: 0.3 }}>
-                  Requires: Python 3.10+, Google Chrome
-                </Typography>
-                <Typography sx={{ color: '#64748b', fontSize: '0.9rem' }}>
-                  No PyPI account needed. The script clones the app and installs it directly. After{' '}
-                  <Box component="code" sx={{ fontFamily: 'monospace', bgcolor: 'rgba(0,0,0,0.06)', px: 0.6, borderRadius: '4px' }}>
-                    jobcook install-service
-                  </Box>
-                  {' '}the agent starts automatically on login.
-                </Typography>
-              </Box>
-              <Button
-                variant="contained"
-                size="small"
-                endIcon={<ArrowForward />}
-                onClick={() => navigate('/auth')}
-                sx={{
-                  flexShrink: 0,
-                  borderRadius: '5px',
-                  fontWeight: 800,
-                  background: 'linear-gradient(135deg, #14532d 0%, #16a34a 60%, #22c55e 100%)',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                Create Account First
-              </Button>
-            </Paper>
           </Stack>
         </Container>
       </Box>
@@ -1394,7 +1069,7 @@ export function LandingPage() {
               <Typography sx={{ color: '#0f172a', fontWeight: 800 }}>ApplyFlow AI</Typography>
             </Stack>
             <Typography sx={{ color: '#64748b', fontSize: '0.92rem', textAlign: { xs: 'center', sm: 'right' } }}>
-              AI-powered LinkedIn job automation with real-time visibility and pipeline control.
+              AI-powered job application automation with real-time visibility and pipeline control.
             </Typography>
           </Stack>
         </Container>

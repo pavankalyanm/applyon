@@ -1,5 +1,5 @@
-import { Box, Button, Container, LinearProgress, Stack, Step, StepLabel, Stepper, Typography } from '@mui/material'
-import { ArrowBack, ArrowForward, CheckCircle, RocketLaunch } from '@mui/icons-material'
+import { Box, Button, Container, IconButton, LinearProgress, Paper, Stack, Step, StepLabel, Stepper, Tooltip, Typography } from '@mui/material'
+import { ArrowBack, ArrowForward, Check, CheckCircle, ContentCopy, RocketLaunch } from '@mui/icons-material'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
@@ -21,7 +21,23 @@ import { ResumeStep } from './onboarding/ResumeStep'
 import { OutreachStep } from './onboarding/OutreachStep'
 import { SecretsStep } from './onboarding/SecretsStep'
 
-const steps = ['Personals', 'Search', 'Questions', 'Settings', 'Resume', 'Outreach', 'Secrets']
+const steps = ['Personals', 'Search', 'Questions', 'Settings', 'Resume', 'Outreach', 'Secrets', 'Install & Connect']
+
+function CopyCmd({ command }: { command: string }) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', bgcolor: '#0f172a', borderRadius: '8px', px: 2, py: 1.25, gap: 1, border: '1px solid rgba(148,163,184,0.12)' }}>
+      <Typography component="code" sx={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: { xs: '0.72rem', sm: '0.82rem' }, color: '#86efac', flexGrow: 1, wordBreak: 'break-all', lineHeight: 1.6 }}>
+        {command}
+      </Typography>
+      <Tooltip title={copied ? 'Copied!' : 'Copy'} placement="top">
+        <IconButton size="small" onClick={() => { navigator.clipboard.writeText(command); setCopied(true); setTimeout(() => setCopied(false), 2000) }} sx={{ color: copied ? '#86efac' : '#64748b', p: 0.5, flexShrink: 0 }}>
+          {copied ? <Check sx={{ fontSize: 15 }} /> : <ContentCopy sx={{ fontSize: 15 }} />}
+        </IconButton>
+      </Tooltip>
+    </Box>
+  )
+}
 
 export function OnboardingWizard() {
   const navigate = useNavigate()
@@ -36,6 +52,7 @@ export function OnboardingWizard() {
   const [resume, setResume] = useState<ResumeConfig>(defaultResume)
   const [outreach, setOutreach] = useState<OutreachConfig>(defaultOutreach)
   const [secrets, setSecrets] = useState<SecretsConfig>(defaultSecrets)
+  const [osTab, setOsTab] = useState<'mac' | 'windows'>('mac')
 
   useEffect(() => {
     async function loadConfig() {
@@ -201,6 +218,71 @@ export function OnboardingWizard() {
             {activeStep === 4 && <ResumeStep value={resume} onChange={setResume} />}
             {activeStep === 5 && <OutreachStep value={outreach} onChange={setOutreach} />}
             {activeStep === 6 && <SecretsStep value={secrets} onChange={setSecrets} />}
+            {activeStep === 7 && (
+              <Stack spacing={3}>
+                <Box>
+                  <Typography variant="h6" sx={{ fontWeight: 800, color: '#0f172a', mb: 0.5 }}>Install & Connect</Typography>
+                  <Typography sx={{ color: '#475569', lineHeight: 1.8 }}>
+                    Run three commands to install Jobcook on your machine, connect it to your account, and
+                    register it as a background service. Pick your operating system below.
+                  </Typography>
+                </Box>
+
+                {/* OS toggle */}
+                <Box sx={{ display: 'inline-flex', bgcolor: 'rgba(15,23,42,0.05)', borderRadius: '8px', p: 0.5, gap: 0.5 }}>
+                  {(['mac', 'windows'] as const).map((os) => (
+                    <Button key={os} size="small" onClick={() => setOsTab(os)}
+                      sx={{ borderRadius: '6px', fontWeight: 700, fontSize: '0.82rem', px: 2, py: 0.6, textTransform: 'none',
+                        ...(osTab === os
+                          ? { bgcolor: '#fff', color: '#0f172a', boxShadow: '0 1px 4px rgba(0,0,0,0.1)' }
+                          : { bgcolor: 'transparent', color: '#64748b' }),
+                      }}
+                    >
+                      {os === 'mac' ? 'macOS / Linux' : 'Windows'}
+                    </Button>
+                  ))}
+                </Box>
+
+                {/* Command cards */}
+                <Stack spacing={2}>
+                  {(() => {
+                    const cards = osTab === 'mac'
+                      ? [
+                          { step: '1', title: 'Install the agent', desc: 'One command downloads and installs Jobcook. Python 3.10+ is installed automatically if needed.', command: 'curl -sSL https://applyflowai.com/install | sh' },
+                          { step: '2', title: 'Connect to your account', desc: 'Log in with your credentials. Your token is saved securely.', command: 'jobcook login' },
+                          { step: '3', title: 'Run in the background', desc: 'Installs as a system service — starts automatically on login.', command: 'jobcook install-service' },
+                        ]
+                      : [
+                          { step: '1', title: 'Install the agent', desc: 'Download and run the installer. Python 3.12 and git are installed automatically via winget.', command: 'curl -o "%TEMP%\\jobcook_install.bat" https://applyflowai.com/install.bat && "%TEMP%\\jobcook_install.bat"' },
+                          { step: '2', title: 'Connect to your account', desc: 'Log in with your credentials. Your token is saved securely.', command: 'jobcook login' },
+                          { step: '3', title: 'Run in the background', desc: 'Registers as a Windows service — starts automatically on login.', command: 'jobcook install-service' },
+                        ]
+                    return cards.map((item) => (
+                      <Paper key={item.step} elevation={0} sx={{ p: 2.5, borderRadius: '10px', border: '1px solid #e2e8f0', bgcolor: '#fafafa', display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                        <Stack direction="row" alignItems="center" spacing={1.5}>
+                          <Box sx={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, display: 'grid', placeItems: 'center', color: '#fff', fontWeight: 900, fontSize: '0.9rem', background: 'linear-gradient(135deg, #14532d, #15803d)', boxShadow: '0 4px 12px rgba(21,128,61,0.22)' }}>
+                            {item.step}
+                          </Box>
+                          <Box>
+                            <Typography sx={{ fontWeight: 700, color: '#0f172a', fontSize: '0.9rem' }}>{item.title}</Typography>
+                            <Typography sx={{ color: '#64748b', fontSize: '0.8rem', mt: 0.2 }}>{item.desc}</Typography>
+                          </Box>
+                        </Stack>
+                        <CopyCmd command={item.command} />
+                      </Paper>
+                    ))
+                  })()}
+                </Stack>
+
+                {/* Callout */}
+                <Stack direction="row" spacing={1.5} sx={{ p: 2, borderRadius: '8px', bgcolor: 'rgba(21,128,61,0.05)', border: '1px solid rgba(21,128,61,0.18)' }}>
+                  <CheckCircle sx={{ color: '#15803d', fontSize: 18, mt: 0.1, flexShrink: 0 }} />
+                  <Typography sx={{ color: '#14532d', fontSize: '0.875rem', lineHeight: 1.6 }}>
+                    Once the service is running you can close the terminal. The agent appears as "Online" in your dashboard.
+                  </Typography>
+                </Stack>
+              </Stack>
+            )}
           </Box>
 
           <Stack direction="row" justifyContent="space-between">
@@ -241,7 +323,7 @@ export function OnboardingWizard() {
                     '&:hover': { background: 'linear-gradient(135deg, #052e16 0%, #15803d 100%)' },
                   }}
                 >
-                  Finish Setup
+                  Go to Dashboard
                 </Button>
               )}
             </Stack>

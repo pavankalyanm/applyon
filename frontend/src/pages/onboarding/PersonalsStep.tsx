@@ -25,9 +25,6 @@ export function PersonalsStep({ value, onChange }: Props) {
       <Typography variant="h6" sx={{ color: '#0f172a' }}>
         Personal Information
       </Typography>
-      <Typography color="text.secondary" fontSize="0.95rem">
-        These fields map directly to <code>bot/config/personals.py</code>.
-      </Typography>
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
         <TextField
           label="First name"

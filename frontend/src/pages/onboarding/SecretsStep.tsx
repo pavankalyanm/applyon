@@ -55,10 +55,6 @@ export function SecretsStep({ value, onChange }: Props) {
       <Typography variant="h6" sx={{ color: '#0f172a' }}>
         Secrets & AI
       </Typography>
-      <Typography color="text.secondary" fontSize="0.95rem">
-        These fields correspond to sensitive values from <code>bot/config/secrets.py</code>. Do not share this page or
-        screenshots of it.
-      </Typography>
       <TextField
         label="LinkedIn username"
         type="email"

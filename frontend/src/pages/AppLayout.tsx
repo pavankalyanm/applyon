@@ -115,18 +115,34 @@ export function AppLayout() {
     <Box sx={{ display: 'flex', minHeight: '100dvh' }}>
       {isMobile ? (
         <>
-          {/* ── Mobile: minimal top bar (branding only) ── */}
+          {/* ── Mobile: top bar with branding + logout ── */}
           <Box
             sx={{
               position: 'fixed', top: 0, left: 0, right: 0, height: 48,
               bgcolor: '#0c1410', borderBottom: '1px solid rgba(34,197,94,0.12)',
-              display: 'flex', alignItems: 'center', px: 2, zIndex: 300, gap: 1.25,
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              px: 2, zIndex: 300,
             }}
           >
-            <RocketLaunch sx={{ color: '#22c55e', fontSize: 17 }} />
-            <Typography sx={{ fontWeight: 800, color: '#f0fdf4', fontSize: '0.88rem', letterSpacing: '-0.01em' }}>
-              ApplyFlow AI
-            </Typography>
+            <Stack direction="row" alignItems="center" spacing={1.25}>
+              <RocketLaunch sx={{ color: '#22c55e', fontSize: 17 }} />
+              <Typography sx={{ fontWeight: 800, color: '#f0fdf4', fontSize: '0.88rem', letterSpacing: '-0.01em' }}>
+                ApplyFlow AI
+              </Typography>
+            </Stack>
+            <Box
+              onClick={logout}
+              sx={{
+                display: 'flex', alignItems: 'center', gap: 0.75,
+                px: 1.25, py: 0.6, cursor: 'pointer', color: '#5a8a6a',
+                borderRadius: 1,
+                '&:hover': { color: '#ef4444', bgcolor: 'rgba(239,68,68,0.08)' },
+                transition: 'all 0.12s ease',
+              }}
+            >
+              <Logout sx={{ fontSize: 16 }} />
+              <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: 'inherit' }}>Logout</Typography>
+            </Box>
           </Box>
 
           {/* ── Mobile: main content between top bar and bottom nav ── */}
@@ -160,10 +176,7 @@ export function AppLayout() {
           >
             <BottomNavigation
               value={activeTab}
-              onChange={(_, path) => {
-                if (path === 'logout') { logout(); return }
-                navigate(path)
-              }}
+              onChange={(_, path) => navigate(path)}
               sx={{
                 height: BOTTOM_NAV_H,
                 bgcolor: 'transparent',
@@ -190,13 +203,6 @@ export function AppLayout() {
                   showLabel
                 />
               ))}
-              <BottomNavigationAction
-                label="Logout"
-                value="logout"
-                icon={<Logout sx={{ fontSize: 22 }} />}
-                showLabel
-                sx={{ '&.Mui-selected': { color: '#ef4444 !important' }, color: '#4a7a5a' }}
-              />
             </BottomNavigation>
           </Paper>
         </>

@@ -31,9 +31,6 @@ export function SearchStep({ value, onChange }: Props) {
       <Typography variant="h6" sx={{ color: '#0f172a' }}>
         Search Preferences
       </Typography>
-      <Typography color="text.secondary" fontSize="0.95rem">
-        These fields map directly to <code>bot/config/search.py</code>.
-      </Typography>
       <TextField
         label="Search terms"
         helperText="One title per line, e.g. Software Engineer, Python Developer"
