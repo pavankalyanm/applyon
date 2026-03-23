@@ -53,8 +53,6 @@ def _mac_plist(log_dir: Path) -> str:
     <dict>
         <key>PATH</key>
         <string>{Path(sys.executable).parent}:/usr/local/bin:/usr/bin:/bin</string>
-        <key>BOT_DISABLE_DIALOGS</key>
-        <string>1</string>
     </dict>
 </dict>
 </plist>
@@ -95,7 +93,6 @@ RestartSec=5
 StandardOutput=journal
 StandardError=journal
 Environment="PATH={Path(sys.executable).parent}:/usr/local/bin:/usr/bin:/bin"
-Environment="BOT_DISABLE_DIALOGS=1"
 
 [Install]
 WantedBy=default.target
@@ -127,7 +124,7 @@ def install_windows() -> str:
         "schtasks", "/Create", "/F",
         "/TN", task_name,
         "/SC", "ONLOGON",
-        "/TR", f'cmd /c "set BOT_DISABLE_DIALOGS=1 && "{exe}" start"',
+        "/TR", f'"{exe}" start',
         "/RL", "HIGHEST",
     ]
     subprocess.run(cmd, check=True)
