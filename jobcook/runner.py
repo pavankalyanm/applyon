@@ -68,16 +68,17 @@ class BotProcess:
             asyncio.run_coroutine_threadsafe(on_done(1), loop).result()
             return
 
+        log_file = tmp_dir / f"run_{self.run_id}.log"
+
         env = os.environ.copy()
         env["PYTHONPATH"] = f"{BOT_DIR}:{env.get('PYTHONPATH', '')}"
         env["BOT_STOP_FILE"] = str(stop_file)
         env["BOT_CONFIG_PATH"] = str(config_file)
         env["PYTHONUNBUFFERED"] = "1"
-
-        if config.get("settings", {}).get("run_in_background"):
-            env["BOT_DISABLE_DIALOGS"] = "1"
-        else:
-            env.pop("BOT_DISABLE_DIALOGS", None)
+        # Jobcook streams output to the web UI — always suppress tkinter dialogs
+        env["BOT_DISABLE_DIALOGS"] = "1"
+        # Unique log file per run to avoid file-locking conflicts
+        env["BOT_LOG_FILE"] = str(log_file)
 
         python_exe = _resolve_python()
         try:

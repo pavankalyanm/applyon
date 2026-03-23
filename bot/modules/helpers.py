@@ -102,8 +102,12 @@ def critical_error_log(possible_reason: str, stack_trace: Exception) -> None:
 
 def get_log_path():
     '''
-    Function to replace '//' with '/' for logs path
+    Function to replace '//' with '/' for logs path.
+    When running via Jobcook, BOT_LOG_FILE overrides to a unique per-run path.
     '''
+    override = os.getenv("BOT_LOG_FILE")
+    if override:
+        return override
     try:
         path = logs_folder_path+"/log.txt"
         return path.replace("//", "/")

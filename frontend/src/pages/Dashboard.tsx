@@ -502,6 +502,12 @@ export function Dashboard() {
       {error && (
         <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 3 }}>
           {error}
+          {/no jobcook agent/i.test(error) && (
+            <Box sx={{ mt: 1, fontSize: '0.875rem' }}>
+              Start it with: <Box component="code" sx={{ bgcolor: 'rgba(0,0,0,0.08)', px: 0.8, py: 0.2, borderRadius: 1, fontFamily: 'monospace' }}>jobcook start</Box>
+              {' '}or enable auto-start: <Box component="code" sx={{ bgcolor: 'rgba(0,0,0,0.08)', px: 0.8, py: 0.2, borderRadius: 1, fontFamily: 'monospace' }}>jobcook install-service</Box>
+            </Box>
+          )}
         </Alert>
       )}
 

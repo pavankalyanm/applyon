@@ -115,13 +115,26 @@ function CopyableCommand({ command }: { command: string }) {
   )
 }
 
-const installSteps = [
-  {
-    step: '1',
-    title: 'Install the agent',
-    desc: 'One command downloads and installs Jobcook on your machine. Requires Python 3.10+ and Google Chrome.',
-    command: 'curl -sSL https://applyflowai.com/install | sh',
-  },
+const installStepsByOS = {
+  mac: [
+    {
+      step: '1',
+      title: 'Install the agent',
+      desc: 'One command downloads and installs Jobcook on your machine. Python 3.10+ is installed automatically if needed.',
+      command: 'curl -sSL https://applyflowai.com/install | sh',
+    },
+  ],
+  windows: [
+    {
+      step: '1',
+      title: 'Install the agent',
+      desc: 'Download and run the installer. Python 3.12 and git are installed automatically via winget if needed.',
+      command: 'curl -o "%TEMP%\\jobcook_install.bat" https://applyflowai.com/install.bat && "%TEMP%\\jobcook_install.bat"',
+    },
+  ],
+}
+
+const installStepsShared = [
   {
     step: '2',
     title: 'Connect to your account',
@@ -140,6 +153,7 @@ export function LandingPage() {
   const navigate = useNavigate()
   const [scrollY, setScrollY] = useState(0)
   const [logIndex, setLogIndex] = useState(0)
+  const [osTab, setOsTab] = useState<'mac' | 'windows'>('mac')
   const [sectionProgress, setSectionProgress] = useState({
     productStory: 0,
     howItWorks: 0,
@@ -1061,6 +1075,40 @@ export function LandingPage() {
               </Typography>
             </Stack>
 
+            {/* OS tab toggle */}
+            <Stack direction="row" justifyContent="center">
+              <Box
+                sx={{
+                  display: 'inline-flex',
+                  bgcolor: 'rgba(15,23,42,0.05)',
+                  borderRadius: '8px',
+                  p: 0.5,
+                  gap: 0.5,
+                }}
+              >
+                {(['mac', 'windows'] as const).map((os) => (
+                  <Button
+                    key={os}
+                    size="small"
+                    onClick={() => setOsTab(os)}
+                    sx={{
+                      borderRadius: '6px',
+                      fontWeight: 700,
+                      fontSize: '0.82rem',
+                      px: 2,
+                      py: 0.6,
+                      textTransform: 'none',
+                      ...(osTab === os
+                        ? { bgcolor: '#fff', color: '#0f172a', boxShadow: '0 1px 4px rgba(0,0,0,0.1)' }
+                        : { bgcolor: 'transparent', color: '#64748b' }),
+                    }}
+                  >
+                    {os === 'mac' ? '🍎 macOS / Linux' : '🪟 Windows'}
+                  </Button>
+                ))}
+              </Box>
+            </Stack>
+
             <Box
               sx={{
                 display: 'grid',
@@ -1068,7 +1116,7 @@ export function LandingPage() {
                 gap: 2.5,
               }}
             >
-              {installSteps.map((item) => (
+              {[...installStepsByOS[osTab], ...installStepsShared].map((item) => (
                 <Paper
                   key={item.step}
                   elevation={0}

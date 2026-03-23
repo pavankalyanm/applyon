@@ -44,6 +44,7 @@ app.add_middleware(
 
 
 INSTALL_SCRIPT = Path(__file__).resolve().parents[1] / "install.sh"
+INSTALL_BAT = Path(__file__).resolve().parents[1] / "install.bat"
 
 
 @app.get("/health")
@@ -53,13 +54,25 @@ def health():
 
 @app.get("/install", response_class=PlainTextResponse)
 def get_install_script():
-    """Serve the Jobcook install script. Usage: curl -sSL https://yourapp.com/install | sh"""
+    """Serve the Jobcook install script for macOS/Linux. Usage: curl -sSL https://applyflowai.com/install | sh"""
     if not INSTALL_SCRIPT.exists():
         return PlainTextResponse("Install script not found.", status_code=404)
     return PlainTextResponse(
         INSTALL_SCRIPT.read_text(),
         media_type="text/x-shellscript",
         headers={"Content-Disposition": "inline; filename=install.sh"},
+    )
+
+
+@app.get("/install.bat", response_class=PlainTextResponse)
+def get_install_bat():
+    """Serve the Jobcook install script for Windows CMD."""
+    if not INSTALL_BAT.exists():
+        return PlainTextResponse("Install script not found.", status_code=404)
+    return PlainTextResponse(
+        INSTALL_BAT.read_text(),
+        media_type="text/plain",
+        headers={"Content-Disposition": "attachment; filename=install.bat"},
     )
 
 

@@ -40,7 +40,7 @@ def _require_creds() -> tuple[str, str]:
 # ── login ────────────────────────────────────────────────────────────────────
 
 @click.command()
-@click.option("--url", prompt="Backend URL", default="http://localhost:8000", show_default=True)
+@click.option("--url", prompt="Backend URL", default="https://applyflowai.com/api", show_default=True)
 @click.option("--email", prompt="Email")
 @click.option("--password", prompt="Password", hide_input=True)
 def login(url: str, email: str, password: str) -> None:
