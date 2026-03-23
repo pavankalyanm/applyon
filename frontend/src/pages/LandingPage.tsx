@@ -492,7 +492,7 @@ export function LandingPage() {
                     maxWidth: 640,
                   }}
                 >
-                  ApplyFlow AI is an AI-powered LinkedIn job application platform that automates search and apply workflows,
+                  ApplyFlow AI is an AI-powered job application platform that automates search and apply workflows,
                   shows real-time bot logs, and gives you a clean command center for every run, every job, and every outcome.
                 </Typography>
 
