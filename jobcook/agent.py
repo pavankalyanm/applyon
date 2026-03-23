@@ -22,7 +22,11 @@ async def run(api_url: str, token: str, on_status: callable | None = None) -> No
     Main agent loop. Connects to backend, handles commands, auto-reconnects.
     on_status(msg: str) is called with human-readable status updates.
     """
-    ws_url = api_url.replace("https://", "wss://").replace("http://", "ws://")
+    # Strip /api suffix — WebSocket is at root /agent/ws, not /api/agent/ws
+    ws_base = api_url.rstrip("/")
+    if ws_base.endswith("/api"):
+        ws_base = ws_base[:-4]
+    ws_url = ws_base.replace("https://", "wss://").replace("http://", "ws://")
     ws_url = f"{ws_url}/agent/ws?token={token}"
     runner = RunnerManager()
 

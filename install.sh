@@ -105,6 +105,16 @@ done
 
 export PATH="$JOBCOOK_BIN:$PATH"
 
+# ── Symlink to /usr/local/bin so jobcook works immediately without rehashing ──
+SYMLINK_TARGET="/usr/local/bin/jobcook"
+if ln -sf "$JOBCOOK_BIN/jobcook" "$SYMLINK_TARGET" 2>/dev/null; then
+    echo "${GREEN}✓${RESET} jobcook available globally (/usr/local/bin)"
+elif sudo ln -sf "$JOBCOOK_BIN/jobcook" "$SYMLINK_TARGET" 2>/dev/null; then
+    echo "${GREEN}✓${RESET} jobcook available globally (/usr/local/bin)"
+else
+    echo "${YELLOW}Note:${RESET} Open a new terminal (or run: source ~/.zshrc) to use jobcook"
+fi
+
 # ── Done ──────────────────────────────────────────────────────────────────────
 echo ""
 echo "${GREEN}${BOLD}Jobcook installed successfully!${RESET}"

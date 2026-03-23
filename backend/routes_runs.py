@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 import queue
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -13,6 +14,19 @@ from . import bot_runner
 
 
 router = APIRouter(prefix="/runs", tags=["runs"])
+
+_REQUIRE_AGENT = os.getenv("REQUIRE_AGENT", "false").lower() == "true"
+
+
+def _start_locally_or_fail(run_id: int) -> None:
+    """Start bot locally, or fail with a clear message if REQUIRE_AGENT=true."""
+    if _REQUIRE_AGENT:
+        bot_runner._mark_run_failed(
+            run_id,
+            "No Jobcook agent connected. Install Jobcook on your local machine and run `jobcook start`.",
+        )
+    else:
+        bot_runner.start_run(run_id)
 
 
 @router.get("/stream")
@@ -114,14 +128,12 @@ async def create_run(
                     s.commit()
                 bot_runner.publish_run_snapshot(run.id, "run_created")
             else:
-                # Agent disconnected between check and send — fall back to local
-                bot_runner.start_run(run.id)
+                _start_locally_or_fail(run.id)
                 bot_runner.publish_run_snapshot(run.id, "run_created")
         except Exception as exc:
             bot_runner._mark_run_failed(run.id, f"Failed to dispatch to agent: {exc}")
     else:
-        # No agent connected — run locally (original behaviour)
-        bot_runner.start_run(run.id)
+        _start_locally_or_fail(run.id)
         bot_runner.publish_run_snapshot(run.id, "run_created")
 
     session.refresh(run)
