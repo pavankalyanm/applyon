@@ -1,7 +1,7 @@
 import type { AuthState } from './types'
 
-const AUTH_KEY = 'applyon_auth'
-const BACKEND_URL_KEY = 'applyon_backend_url'
+const AUTH_KEY = 'applyflowai_auth'
+const BACKEND_URL_KEY = 'applyflowai_backend_url'
 
 export async function getAuth(): Promise<AuthState | null> {
   const result = await chrome.storage.local.get(AUTH_KEY)

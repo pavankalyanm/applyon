@@ -63,7 +63,7 @@ chrome.runtime.onMessage.addListener((msg: Msg, _sender, sendResponse) => {
   // Web app logout detected
   if (msg.type === 'CLEAR_AUTH') {
     disconnectAgent()
-    chrome.storage.local.remove('applyon_auth')
+    chrome.storage.local.remove('applyflowai_auth')
     sendResponse({ ok: true })
     return true
   }
@@ -168,7 +168,7 @@ async function connectAgent(auth: AuthState) {
   await chrome.storage.session.set({ lastConnectAttempt: now })
 
   const wsUrl = auth.backendUrl.replace(/^http/, 'ws') + `/agent/ws?token=${auth.token}`
-  console.log('[ApplyOn agent] Connecting to', wsUrl.replace(/token=.*/, 'token=***'))
+  console.log('[ApplyFlow AI agent] Connecting to', wsUrl.replace(/token=.*/, 'token=***'))
 
   try {
     wsAgent = new WebSocket(wsUrl)
@@ -177,7 +177,7 @@ async function connectAgent(auth: AuthState) {
   }
 
   wsAgent.onopen = () => {
-    console.log('[ApplyOn agent] Connected')
+    console.log('[ApplyFlow AI agent] Connected')
     wsAgent!.send(JSON.stringify({ type: 'agent_ready' }))
     broadcastAgentStatus(true)
 
@@ -196,14 +196,14 @@ async function connectAgent(auth: AuthState) {
   }
 
   wsAgent.onclose = () => {
-    console.log('[ApplyOn agent] Disconnected')
+    console.log('[ApplyFlow AI agent] Disconnected')
     if (keepaliveTimer) { clearInterval(keepaliveTimer); keepaliveTimer = null }
     wsAgent = null
     broadcastAgentStatus(false)
   }
 
   wsAgent.onerror = (e) => {
-    console.warn('[ApplyOn agent] WebSocket error — backend may not be running', e)
+    console.warn('[ApplyFlow AI agent] WebSocket error — backend may not be running', e)
     if (keepaliveTimer) { clearInterval(keepaliveTimer); keepaliveTimer = null }
     wsAgent = null
     broadcastAgentStatus(false)

@@ -1,5 +1,5 @@
 /**
- * ApplyOn LinkedIn Bot — content script injected into a LinkedIn jobs tab.
+ * ApplyFlow AI LinkedIn Bot — content script injected into a LinkedIn jobs tab.
  * Reads run context from chrome.storage.session, applies to Easy Apply jobs,
  * and sends logs back to the background service worker.
  */
@@ -24,10 +24,10 @@ function isCtxValid(): boolean {
 }
 
 // ─── Guard: only run once per tab ──────────────────────────────────────────
-if ((window as Window & { _applyonBotRunning?: boolean })._applyonBotRunning) {
+if ((window as Window & { _applyflowBotRunning?: boolean })._applyflowBotRunning) {
   throw new Error('Bot already running')
 }
-;(window as Window & { _applyonBotRunning?: boolean })._applyonBotRunning = true
+;(window as Window & { _applyflowBotRunning?: boolean })._applyflowBotRunning = true
 
 // ─── Globals ────────────────────────────────────────────────────────────────
 let ctx: BotContext | null = null
@@ -52,17 +52,17 @@ try {
   // Wait briefly for background to set context (handles race condition on page load)
   let stored: Record<string, unknown> = {}
   try {
-    stored = await chrome.storage.session.get('applyon_bot_context')
-    if (!stored.applyon_bot_context) {
+    stored = await chrome.storage.session.get('applyflowai_bot_context')
+    if (!stored.applyflowai_bot_context) {
       await sleep(800)
       if (!isCtxValid()) return
-      stored = await chrome.storage.session.get('applyon_bot_context')
+      stored = await chrome.storage.session.get('applyflowai_bot_context')
     }
   } catch {
     return // storage not accessible — context invalid
   }
 
-  ctx = stored.applyon_bot_context as BotContext | null
+  ctx = stored.applyflowai_bot_context as BotContext | null
   // Silently exit if this is not a bot-initiated navigation
   if (!ctx) return
 
@@ -474,7 +474,7 @@ async function reportJob(job: JobRecord) {
 function log(line: string) {
   const ts = new Date().toISOString().slice(11, 19)
   const msg = `[${ts}] ${line}`
-  console.log('[ApplyOn Bot]', msg)
+  console.log('[ApplyFlow AI Bot]', msg)
   if (!isCtxValid()) return
   try { chrome.runtime.sendMessage({ type: 'BOT_LOG', line: msg }) } catch { /* context gone */ }
 }

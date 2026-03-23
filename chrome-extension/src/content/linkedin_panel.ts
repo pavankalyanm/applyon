@@ -2,10 +2,10 @@
 // All backend calls go through the background service worker to avoid CORS issues.
 
 (function () {
-  if (document.getElementById('applyon-root')) return
+  if (document.getElementById('applyflowai-root')) return
 
   const host = document.createElement('div')
-  host.id = 'applyon-root'
+  host.id = 'applyflowai-root'
   host.style.cssText = `
     position: fixed;
     bottom: 24px;
@@ -53,7 +53,7 @@
   dot.className = 'dot'
 
   const label = document.createElement('span')
-  label.textContent = 'ApplyOn'
+  label.textContent = 'ApplyFlow AI'
 
   const btn = document.createElement('button')
   btn.className = 'btn'
@@ -72,7 +72,7 @@
   hint.textContent = 'Click the extension icon for full controls'
 
   const h4 = document.createElement('h4')
-  h4.textContent = 'ApplyOn Status'
+  h4.textContent = 'ApplyFlow AI Status'
 
   overlay.appendChild(h4)
   overlay.appendChild(statusText)

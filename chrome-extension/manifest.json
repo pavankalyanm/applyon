@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "ApplyOn Bot",
+  "name": "ApplyFlow AI",
   "version": "1.0.0",
-  "description": "Control your ApplyOn job application bot from Chrome",
+  "description": "Control your ApplyFlow AI job application bot from Chrome",
   "icons": {
     "16": "assets/icon16.png",
     "48": "assets/icon48.png",
@@ -24,8 +24,8 @@
       "matches": [
         "*://localhost:*/*",
         "*://127.0.0.1:*/*",
-        "https://applyon.app/*",
-        "https://app.applyon.app/*"
+        "https://applyflowai.com/*",
+        "https://www.applyflowai.com/*"
       ],
       "js": ["src/content/webapp_bridge.ts"],
       "run_at": "document_idle"

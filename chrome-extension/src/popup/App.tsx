@@ -26,8 +26,8 @@ export default function App() {
 
     // Re-check auth on storage changes (web app login detected automatically)
     const listener = (changes: Record<string, chrome.storage.StorageChange>) => {
-      if (changes['applyon_auth']) {
-        setAuth(changes['applyon_auth'].newValue ?? null)
+      if (changes['applyflowai_auth']) {
+        setAuth(changes['applyflowai_auth'].newValue ?? null)
       }
     }
     chrome.storage.local.onChanged.addListener(listener)
@@ -92,7 +92,7 @@ export default function App() {
     <>
       <div className="header">
         <div className="logo">A</div>
-        <h1>ApplyOn</h1>
+        <h1>ApplyFlow AI</h1>
         {auth && (
           <span
             className="badge"
