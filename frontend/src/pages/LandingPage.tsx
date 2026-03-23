@@ -206,6 +206,27 @@ export function LandingPage() {
     const index = (logIndex + offset) % liveLogs.length
     return liveLogs[index]
   })
+
+  const termLines = useMemo(() => [
+    { type: 'cmd', text: 'curl -sSL https://applyflowai.com/install | sh' },
+    { type: 'out', text: '✓ Python 3.12' },
+    { type: 'out', text: '✓ Jobcook installed successfully!' },
+    { type: 'cmd', text: 'jobcook login' },
+    { type: 'prompt', text: 'Backend URL: https://applyflowai.com' },
+    { type: 'prompt', text: 'Email: you@email.com  Password: ••••••••' },
+    { type: 'out', text: '✓ Logged in · token saved to ~/.jobcook/config.json' },
+    { type: 'cmd', text: 'jobcook install-service' },
+    { type: 'out', text: '✓ Service installed · agent starts automatically on login' },
+    { type: 'status', text: '● Agent connected → applyflowai.com' },
+  ], [])
+
+  const [termStep, setTermStep] = useState(0)
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setTermStep((s) => (s + 1 >= termLines.length ? 0 : s + 1))
+    }, 1400)
+    return () => window.clearInterval(id)
+  }, [termLines])
   const heroProgress = Math.min(scrollY / 900, 1.1)
   const heroTextShift = Math.min(scrollY * 0.18, 120)
   const heroPanelShift = Math.min(scrollY * 0.14, 110)
@@ -1092,6 +1113,62 @@ export function LandingPage() {
                 </Paper>
               ))}
             </Box>
+
+            {/* ── Terminal animation ── */}
+            <Paper
+              elevation={0}
+              sx={{
+                borderRadius: '5px',
+                overflow: 'hidden',
+                border: '1px solid rgba(148,163,184,0.18)',
+                boxShadow: '0 16px 48px rgba(15,23,42,0.12)',
+              }}
+            >
+              {/* title bar */}
+              <Box sx={{ px: 2, py: 1.2, bgcolor: '#1e293b', display: 'flex', alignItems: 'center', gap: 1 }}>
+                {['#ef4444','#f59e0b','#22c55e'].map((c) => (
+                  <Box key={c} sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: c }} />
+                ))}
+                <Typography sx={{ color: '#64748b', fontSize: '0.8rem', ml: 1, fontFamily: 'monospace' }}>
+                  terminal
+                </Typography>
+              </Box>
+              {/* body */}
+              <Box
+                sx={{
+                  bgcolor: '#0f172a',
+                  p: { xs: 2, md: 3 },
+                  minHeight: 200,
+                  fontFamily: 'monospace',
+                  fontSize: { xs: '0.78rem', md: '0.875rem' },
+                  lineHeight: 1.9,
+                }}
+              >
+                {termLines.slice(0, termStep + 1).map((line, i) => (
+                  <Box key={i} sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
+                    {line.type === 'cmd' && (
+                      <>
+                        <Box component="span" sx={{ color: '#4ade80', userSelect: 'none' }}>$</Box>
+                        <Box component="span" sx={{ color: '#e2e8f0' }}>{line.text}</Box>
+                      </>
+                    )}
+                    {line.type === 'out' && (
+                      <Box component="span" sx={{ color: '#86efac', pl: 2 }}>{line.text}</Box>
+                    )}
+                    {line.type === 'prompt' && (
+                      <Box component="span" sx={{ color: '#94a3b8', pl: 2 }}>{line.text}</Box>
+                    )}
+                    {line.type === 'status' && (
+                      <Box component="span" sx={{ color: '#4ade80', fontWeight: 700, pl: 2, animation: 'pulse 2s infinite', '@keyframes pulse': { '0%,100%': { opacity: 1 }, '50%': { opacity: 0.6 } } }}>
+                        {line.text}
+                      </Box>
+                    )}
+                  </Box>
+                ))}
+                {/* blinking cursor */}
+                <Box component="span" sx={{ display: 'inline-block', width: 8, height: '1em', bgcolor: '#4ade80', ml: termStep === termLines.length - 1 ? 2 : 0, animation: 'blink 1s step-end infinite', '@keyframes blink': { '0%,100%': { opacity: 1 }, '50%': { opacity: 0 } } }} />
+              </Box>
+            </Paper>
 
             <Paper
               elevation={0}
