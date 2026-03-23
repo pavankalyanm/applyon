@@ -17,10 +17,22 @@ from .auth import get_current_user
 router = APIRouter(prefix="/resumes", tags=["resumes"])
 
 
+def _makedirs(path: Path) -> None:
+    """mkdir -p with subprocess fallback for filesystems where os.stat returns ENOTSUP."""
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        import subprocess, sys
+        if sys.platform != "win32":
+            subprocess.run(["mkdir", "-p", str(path)], check=True)
+        else:
+            raise
+
+
 def _storage_root() -> Path:
     base = os.getenv("RESUME_STORAGE_DIR", "./storage/resumes")
     root = Path(base).expanduser().absolute()
-    root.mkdir(parents=True, exist_ok=True)
+    _makedirs(root)
     return root
 
 

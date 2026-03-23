@@ -29,10 +29,22 @@ from sqlalchemy import MetaData, Table, and_, select
 from . import db, models
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).parent.parent
 BOT_DIR = PROJECT_ROOT / "bot"
 BOT_ENTRY = BOT_DIR / "runAiBot.py"
 RUNTIME_DIR = PROJECT_ROOT / "bot_runtime"
+
+
+def _makedirs(path: Path) -> None:
+    """mkdir -p with subprocess fallback for filesystems where os.stat returns ENOTSUP."""
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        import subprocess, sys
+        if sys.platform != "win32":
+            subprocess.run(["mkdir", "-p", str(path)], check=True)
+        else:
+            raise
 _run_stream_lock = threading.Lock()
 _run_stream_subscribers: dict[int, set[queue.Queue]] = {}
 
@@ -129,13 +141,13 @@ def _user_runtime_dir(user_id: int) -> Path:
 
 def _run_stop_file(user_id: int, run_id: int) -> Path:
     d = _user_runtime_dir(user_id) / "runs"
-    d.mkdir(parents=True, exist_ok=True)
+    _makedirs(d)
     return d / f"run_{run_id}.stop"
 
 
 def _run_config_file(user_id: int, run_id: int) -> Path:
     d = _user_runtime_dir(user_id) / "runs"
-    d.mkdir(parents=True, exist_ok=True)
+    _makedirs(d)
     return d / f"run_{run_id}.config.json"
 
 
