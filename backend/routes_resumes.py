@@ -19,7 +19,7 @@ router = APIRouter(prefix="/resumes", tags=["resumes"])
 
 def _storage_root() -> Path:
     base = os.getenv("RESUME_STORAGE_DIR", "./storage/resumes")
-    root = Path(base).resolve()
+    root = Path(base).expanduser().absolute()
     root.mkdir(parents=True, exist_ok=True)
     return root
 
