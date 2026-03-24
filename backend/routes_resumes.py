@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from . import db, models
@@ -194,6 +195,26 @@ def delete_resume(
     session.commit()
 
     return _build_response(cfg, remaining)
+
+
+@router.get("/{resume_id}/download")
+def download_resume(
+    resume_id: str,
+    current_user: models.User = Depends(get_current_user),
+    session: Session = Depends(db.get_session),
+):
+    """Download the PDF file for a resume (used by the local agent)."""
+    resume = (
+        session.query(models.Resume)
+        .filter(models.Resume.id == resume_id, models.Resume.user_id == current_user.id)
+        .one_or_none()
+    )
+    if resume is None:
+        raise HTTPException(status_code=404, detail="Resume not found")
+    path = Path(resume.path)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Resume file missing on server")
+    return FileResponse(path, media_type="application/pdf", filename=resume.label)
 
 
 @router.post("/{resume_id}/default")

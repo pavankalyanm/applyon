@@ -8,6 +8,9 @@ import asyncio
 import json
 import platform
 import ssl
+import tempfile
+from pathlib import Path
+from urllib.request import Request, urlopen
 
 import certifi
 import websockets
@@ -20,6 +23,25 @@ from . import __version__
 from .runner import RunnerManager
 
 RECONNECT_DELAY = 5  # seconds between reconnect attempts
+
+# Temp files created for downloaded resumes — kept for the process lifetime
+_resume_tmp_files: list[tempfile.NamedTemporaryFile] = []
+
+
+def _download_resume(api_url: str, token: str, resume_id: str) -> str | None:
+    """Download resume PDF from backend to a local temp file. Returns local path or None."""
+    url = f"{api_url.rstrip('/')}/resumes/{resume_id}/download"
+    try:
+        req = Request(url, headers={"Authorization": f"Bearer {token}"})
+        with urlopen(req, context=_ssl_ctx, timeout=30) as resp:
+            data = resp.read()
+        tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+        tmp.write(data)
+        tmp.flush()
+        _resume_tmp_files.append(tmp)
+        return tmp.name
+    except Exception:
+        return None
 
 
 async def run(api_url: str, token: str, on_status: callable | None = None) -> None:
@@ -65,6 +87,15 @@ async def run(api_url: str, token: str, on_status: callable | None = None) -> No
                         run_id = msg["run_id"]
                         config = msg["config"]
                         status(f"Starting run #{run_id} ...")
+
+                        # Download resume to local temp file so the bot can read it
+                        resume_id = config.get("resume", {}).get("resume_id")
+                        if resume_id:
+                            local_path = _download_resume(api_url, token, resume_id)
+                            if local_path:
+                                config["resume"]["selected_resume_path"] = local_path
+                                if "questions" in config:
+                                    config["questions"]["default_resume_path"] = local_path
 
                         async def send_log(line: str, _rid=run_id) -> None:
                             try:

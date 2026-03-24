@@ -237,6 +237,8 @@ def _build_run_config_snapshot(user_id: int, run_type: str = "apply", run_input:
             resume_cfg = {
                 "default_resume_id": selected_resume_id,
                 "selected_resume_path": selected_resume_path,
+                # agent uses this to download the file locally before starting the bot
+                "resume_id": selected_resume_id,
             }
         except Exception:
             questions["default_resume_path"] = ""
