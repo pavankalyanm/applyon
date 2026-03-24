@@ -7,9 +7,14 @@ from __future__ import annotations
 import asyncio
 import json
 import platform
+import ssl
 
+import certifi
 import websockets
 import websockets.exceptions
+
+# Use certifi's CA bundle so macOS/Windows Python can verify public certs
+_ssl_ctx = ssl.create_default_context(cafile=certifi.where())
 
 from . import __version__
 from .runner import RunnerManager
@@ -37,7 +42,7 @@ async def run(api_url: str, token: str, on_status: callable | None = None) -> No
     while True:
         try:
             status(f"Connecting to {api_url} ...")
-            async with websockets.connect(ws_url, ping_interval=30, ping_timeout=10) as ws:
+            async with websockets.connect(ws_url, ssl=_ssl_ctx, ping_interval=30, ping_timeout=10) as ws:
                 status("Connected. Jobcook agent is running.")
 
                 await ws.send(json.dumps({
