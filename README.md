@@ -10,5 +10,5 @@ Automation + dashboards for managing a job application workflow.
 
 ## Quick start
 
-See `setup.md`.
+See `setup.md` and follow the steps.
 
